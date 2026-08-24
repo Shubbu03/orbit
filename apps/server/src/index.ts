@@ -1,9 +1,11 @@
-import { Hono } from 'hono'
+import { createApp } from "./app";
 
-const app = new Hono()
+const port = Number(process.env.PORT) || 3000;
+const trustedOrigin = process.env.TRUSTED_ORIGIN || "http://localhost:3001";
 
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
+const app = createApp(trustedOrigin);
 
-export default app
+export default {
+  port,
+  fetch: app.fetch,
+};

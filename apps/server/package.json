@@ -5,12 +5,8 @@
   },
   "dependencies": {
     "@orbit/db": "workspace:*",
-    "@hono/node-server": "^2.1.1",
     "dotenv": "^17.4.2",
     "hono": "^4.13.3",
     "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "tsx": "^4.23.9"
   }
 }

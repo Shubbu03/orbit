@@ -24,7 +24,8 @@ export function createApp(trustedOrigin: string) {
   );
 
   app.get("/health", (context) => {
-    const body = { status: "ok" };
-    return context.json(body);
+    return context.json({ status: "ok" });
   });
+
+  return app;
 }
