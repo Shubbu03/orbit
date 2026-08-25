@@ -4,13 +4,26 @@ import { secureHeaders } from "hono/secure-headers";
 
 import type { AuthModule } from "./lib/auth";
 import { createAuthRoutes } from "./routes/auth";
+import {
+  createOrganisationRoutes,
+  type OrganisationRouteAuth,
+} from "./routes/organisation";
+import type { OrganisationService } from "./services/organisation";
 
 type CreateAppOptions = {
-  auth: Pick<AuthModule, "handler">;
+  auth: Pick<AuthModule, "handler"> & OrganisationRouteAuth;
+  organisationService: Pick<
+    OrganisationService,
+    "create" | "deleteOrganisation" | "listForUser"
+  >;
   trustedOrigin: string;
 };
 
-export function createApp({ auth, trustedOrigin }: CreateAppOptions) {
+export function createApp({
+  auth,
+  organisationService,
+  trustedOrigin,
+}: CreateAppOptions) {
   const app = new Hono();
 
   app.use("*", secureHeaders());
@@ -40,6 +53,7 @@ export function createApp({ auth, trustedOrigin }: CreateAppOptions) {
   });
 
   app.route("/api/auth", createAuthRoutes(auth));
+  app.route("/api", createOrganisationRoutes({ auth, organisationService }));
 
   return app;
 }

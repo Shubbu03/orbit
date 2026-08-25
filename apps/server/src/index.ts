@@ -3,6 +3,7 @@ import { createDatabase } from "@orbit/db";
 import { env } from "./env";
 import { createApp } from "./app";
 import { createAuthService } from "./services/auth";
+import { createOrganisationService } from "./services/organisation";
 
 const database = createDatabase(env.DATABASE_URL);
 
@@ -17,8 +18,11 @@ const auth = createAuthService({
   },
 });
 
+const organisationService = createOrganisationService(database);
+
 const app = createApp({
   auth,
+  organisationService,
   trustedOrigin: env.TRUSTED_ORIGIN,
 });
 
