@@ -23,9 +23,9 @@ export const issues = pgTable(
 		index("issues_board_id_idx").on(table.boardId),
 		index("issues_section_id_idx").on(table.sectionId),
 		foreignKey({
-			name: "issues_board_id_section_id_sections_fk",
-			columns: [table.boardId, table.sectionId],
-			foreignColumns: [sections.boardId, sections.id],
+			name: "issues_section_id_board_id_sections_fk",
+			columns: [table.sectionId, table.boardId],
+			foreignColumns: [sections.id, sections.boardId],
 		}).onDelete("cascade"),
 	],
 );

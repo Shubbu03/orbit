@@ -22,6 +22,13 @@
       "when": 1787650007058,
       "tag": "20260825092647_add_membership_accepted",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787652142648,
+      "tag": "20260825100222_stabilize_section_composite_key",
+      "breakpoints": true
     }
   ]
 }

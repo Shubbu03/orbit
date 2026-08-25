@@ -18,6 +18,6 @@ export const sections = pgTable(
 	},
 	(table) => [
 		index("sections_board_id_idx").on(table.boardId),
-		unique("sections_board_id_id_unique").on(table.boardId, table.id),
+		unique("sections_id_board_id_unique").on(table.id, table.boardId),
 	],
 );
