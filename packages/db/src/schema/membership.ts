@@ -1,4 +1,12 @@
-import { index, pgEnum, pgTable, text, timestamp, unique } from "drizzle-orm/pg-core";
+import {
+	boolean,
+	index,
+	pgEnum,
+	pgTable,
+	text,
+	timestamp,
+	unique,
+} from "drizzle-orm/pg-core";
 
 import { organisation } from "./organisation.js";
 import { user } from "./user.js";
@@ -16,6 +24,7 @@ export const membership = pgTable(
 			.notNull()
 			.references(() => organisation.id, { onDelete: "cascade" }),
 		role: roleEnum().notNull(),
+		accepted: boolean("accepted").default(false).notNull(),
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()

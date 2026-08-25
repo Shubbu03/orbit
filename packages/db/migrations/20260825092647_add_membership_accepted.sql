@@ -1,0 +1,1 @@
+ALTER TABLE "membership" ADD COLUMN "accepted" boolean DEFAULT false NOT NULL;
