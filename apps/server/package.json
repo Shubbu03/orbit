@@ -1,12 +1,25 @@
 {
-  "name": "server",
+  "name": "@orbit/server",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "dev": "bun run --hot src/index.ts"
+    "build": "bun build src/index.ts --target bun --outdir dist",
+    "check-types": "tsc --noEmit",
+    "dev": "bun run --hot src/index.ts",
+    "lint": "eslint . --max-warnings 0",
+    "test": "bun test"
   },
   "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.1",
     "@orbit/db": "workspace:*",
+    "better-auth": "^1.7.1",
     "dotenv": "^17.4.2",
     "hono": "^4.13.3",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@orbit/eslint-config": "workspace:*",
+    "eslint": "^9.39.1",
+    "typescript": "5.9.2"
   }
 }

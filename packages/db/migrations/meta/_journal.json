@@ -5,8 +5,15 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1787551968383,
-      "tag": "20260824061248_narrow_guardsmen",
+      "when": 1787579656474,
+      "tag": "20260824135416_init",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1787642682946,
+      "tag": "20260825072442_better_auth_account_issuer",
       "breakpoints": true
     }
   ]

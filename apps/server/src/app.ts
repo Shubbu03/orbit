@@ -1,8 +1,19 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 
-export function createApp(trustedOrigin: string) {
+import type { AuthModule } from "./lib/auth";
+import { createAuthRoutes } from "./routes/auth";
+
+type CreateAppOptions = {
+  auth: Pick<AuthModule, "handler">;
+  trustedOrigin: string;
+};
+
+export function createApp({ auth, trustedOrigin }: CreateAppOptions) {
   const app = new Hono();
+
+  app.use("*", secureHeaders());
 
   app.use(
     "/api/*",
@@ -17,6 +28,7 @@ export function createApp(trustedOrigin: string) {
         "Retry-After",
         "Server-Timing",
         "X-Request-Id",
+        "X-Retry-After",
       ],
       maxAge: 600,
       origin: trustedOrigin,
@@ -26,6 +38,8 @@ export function createApp(trustedOrigin: string) {
   app.get("/health", (context) => {
     return context.json({ status: "ok" });
   });
+
+  app.route("/api/auth", createAuthRoutes(auth));
 
   return app;
 }

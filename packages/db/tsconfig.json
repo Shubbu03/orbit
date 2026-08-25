@@ -1,8 +1,8 @@
 {
-	"extends": "@repo/typescript-config/node.json",
-	"compilerOptions": {
-		"noEmit": true
-	},
-	"include": ["drizzle.config.ts", "src"],
-	"exclude": ["node_modules", "dist"]
+  "extends": "@orbit/typescript-config/node.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["drizzle.config.ts", "src"],
+  "exclude": ["node_modules", "dist"]
 }

@@ -1,11 +1,28 @@
+import { createDatabase } from "@orbit/db";
+
+import { env } from "./env";
 import { createApp } from "./app";
+import { createAuthService } from "./services/auth";
 
-const port = Number(process.env.PORT) || 3000;
-const trustedOrigin = process.env.TRUSTED_ORIGIN || "http://localhost:3001";
+const database = createDatabase(env.DATABASE_URL);
 
-const app = createApp(trustedOrigin);
+const auth = createAuthService({
+  apiOrigin: env.API_ORIGIN,
+  database,
+  secret: env.AUTH_SECRET,
+  trustedOrigins: [env.TRUSTED_ORIGIN],
+  google: {
+    clientId: env.GOOGLE_CLIENT_ID,
+    clientSecret: env.GOOGLE_CLIENT_SECRET,
+  },
+});
+
+const app = createApp({
+  auth,
+  trustedOrigin: env.TRUSTED_ORIGIN,
+});
 
 export default {
-  port,
+  port: env.PORT,
   fetch: app.fetch,
 };

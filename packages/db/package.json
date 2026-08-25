@@ -2,22 +2,25 @@
   "name": "@orbit/db",
   "private": true,
   "type": "module",
-	"exports": "./src/index.ts",
-	"scripts": {
-		"lint": "eslint . --max-warnings 0",
-		"check-types": "tsc --noEmit"
-	},
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint . --max-warnings 0",
+    "check-types": "tsc --noEmit"
+  },
   "dependencies": {
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "postgres": "^3.4.0",
     "zod": "^4.4.3"
   },
-	"devDependencies": {
-		"@repo/eslint-config": "*",
-		"@repo/typescript-config": "*",
-		"@types/node": "^22.15.3",
-		"drizzle-kit": "^0.31.0",
-		"eslint": "^9.39.1"
-	}
+  "devDependencies": {
+    "@orbit/eslint-config": "workspace:*",
+    "@orbit/typescript-config": "workspace:*",
+    "@types/node": "^22.15.3",
+    "drizzle-kit": "^0.31.0",
+    "eslint": "^9.39.1"
+  }
 }
