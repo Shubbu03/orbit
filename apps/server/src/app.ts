@@ -4,14 +4,20 @@ import { secureHeaders } from "hono/secure-headers";
 
 import type { AuthModule } from "./lib/auth";
 import { createAuthRoutes } from "./routes/auth";
+import { createBoardRoutes, type BoardRouteAuth } from "./routes/boards";
 import {
   createOrganisationRoutes,
   type OrganisationRouteAuth,
 } from "./routes/organisation";
+import type { BoardService } from "./services/boards";
 import type { OrganisationService } from "./services/organisation";
 
 type CreateAppOptions = {
-  auth: Pick<AuthModule, "handler"> & OrganisationRouteAuth;
+  auth: Pick<AuthModule, "handler"> & BoardRouteAuth & OrganisationRouteAuth;
+  boardService: Pick<
+    BoardService,
+    "create" | "deleteBoard" | "listForUser" | "update"
+  >;
   organisationService: Pick<
     OrganisationService,
     "create" | "deleteOrganisation" | "listForUser"
@@ -21,6 +27,7 @@ type CreateAppOptions = {
 
 export function createApp({
   auth,
+  boardService,
   organisationService,
   trustedOrigin,
 }: CreateAppOptions) {
@@ -54,6 +61,7 @@ export function createApp({
 
   app.route("/api/auth", createAuthRoutes(auth));
   app.route("/api", createOrganisationRoutes({ auth, organisationService }));
+  app.route("/api", createBoardRoutes({ auth, boardService }));
 
   return app;
 }
