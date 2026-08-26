@@ -2,52 +2,54 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
-import type { BoardService } from "../services/boards";
+import type { SectionService } from "../services/sections";
 
-const boardParamsSchema = z
+const sectionParamsSchema = z
+  .object({
+    sectionId: z.uuid(),
+  })
+  .strict();
+
+const createSectionBodySchema = z
   .object({
     boardId: z.uuid(),
-  })
-  .strict();
-
-const createBoardBodySchema = z
-  .object({
-    organisationId: z.uuid(),
     title: z.string().trim().min(1).max(100),
   })
   .strict();
 
-const updateBoardBodySchema = z
+const updateSectionBodySchema = createSectionBodySchema.pick({ title: true });
+
+const listSectionsQuerySchema = z
   .object({
-    title: z.string().trim().min(1).max(100),
+    boardId: z.uuid().optional(),
   })
   .strict();
 
-type BoardRoutesEnv = {
+type SectionRoutesEnv = {
   Variables: {
     userId: string;
   };
 };
 
-export type BoardRouteAuth = {
+export type SectionRouteAuth = {
   getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>;
 };
 
-type CreateBoardRoutesOptions = {
-  auth: BoardRouteAuth;
-  boardService: Pick<
-    BoardService,
-    "create" | "deleteBoard" | "listForUser" | "update"
+type CreateSectionRoutesOptions = {
+  auth: SectionRouteAuth;
+  sectionService: Pick<
+    SectionService,
+    "create" | "deleteSection" | "listForUser" | "update"
   >;
 };
 
-export function createBoardRoutes({
+export function createSectionRoutes({
   auth,
-  boardService,
-}: CreateBoardRoutesOptions) {
-  const boardRoutes = new Hono<BoardRoutesEnv>();
+  sectionService,
+}: CreateSectionRoutesOptions) {
+  const sectionRoutes = new Hono<SectionRoutesEnv>();
 
-  boardRoutes.use("*", async (context, next) => {
+  sectionRoutes.use("*", async (context, next) => {
     const session = await auth.getSession(context.req.raw.headers);
 
     if (!session) {
@@ -66,7 +68,7 @@ export function createBoardRoutes({
     await next();
   });
 
-  boardRoutes.post("/boards", async (context) => {
+  sectionRoutes.post("/sections", async (context) => {
     const contentType = context.req.header("content-type");
 
     if (!contentType?.toLowerCase().startsWith("application/json")) {
@@ -82,7 +84,7 @@ export function createBoardRoutes({
     }
 
     const body: unknown = await context.req.json().catch(() => null);
-    const parsedBody = createBoardBodySchema.safeParse(body);
+    const parsedBody = createSectionBodySchema.safeParse(body);
 
     if (!parsedBody.success) {
       return context.json(
@@ -97,36 +99,54 @@ export function createBoardRoutes({
       );
     }
 
-    const createdBoard = await boardService.create({
+    const createdSection = await sectionService.create({
       ...parsedBody.data,
       userId: context.var.userId,
     });
 
-    if (!createdBoard) {
+    if (!createdSection) {
       return context.json(
         {
           error: {
-            code: "ORGANIZATION_NOT_FOUND",
-            message: "Organization not found",
+            code: "BOARD_NOT_FOUND",
+            message: "Board not found",
           },
         },
         404,
       );
     }
 
-    return context.json({ board: createdBoard }, 201);
+    return context.json({ section: createdSection }, 201);
   });
 
-  boardRoutes.get("/boards", async (context) => {
-    const userBoards = await boardService.listForUser({
+  sectionRoutes.get("/sections", async (context) => {
+    const parsedQuery = listSectionsQuerySchema.safeParse(context.req.query());
+
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
+    const userSections = await sectionService.listForUser({
+      ...(parsedQuery.data.boardId
+        ? { boardId: parsedQuery.data.boardId }
+        : {}),
       userId: context.var.userId,
     });
 
-    return context.json({ boards: userBoards });
+    return context.json({ sections: userSections });
   });
 
-  boardRoutes.put("/boards/:boardId", async (context) => {
-    const parsedParams = boardParamsSchema.safeParse(context.req.param());
+  sectionRoutes.put("/sections/:sectionId", async (context) => {
+    const parsedParams = sectionParamsSchema.safeParse(context.req.param());
 
     if (!parsedParams.success) {
       return context.json(
@@ -134,7 +154,7 @@ export function createBoardRoutes({
           error: {
             code: "VALIDATION_ERROR",
             fields: getFieldErrors(parsedParams.error),
-            message: "Invalid board ID",
+            message: "Invalid section ID",
           },
         },
         400,
@@ -156,7 +176,7 @@ export function createBoardRoutes({
     }
 
     const body: unknown = await context.req.json().catch(() => null);
-    const parsedBody = updateBoardBodySchema.safeParse(body);
+    const parsedBody = updateSectionBodySchema.safeParse(body);
 
     if (!parsedBody.success) {
       return context.json(
@@ -171,29 +191,29 @@ export function createBoardRoutes({
       );
     }
 
-    const updatedBoard = await boardService.update({
-      boardId: parsedParams.data.boardId,
+    const updatedSection = await sectionService.update({
+      sectionId: parsedParams.data.sectionId,
       title: parsedBody.data.title,
       userId: context.var.userId,
     });
 
-    if (!updatedBoard) {
+    if (!updatedSection) {
       return context.json(
         {
           error: {
-            code: "BOARD_NOT_FOUND",
-            message: "Board not found",
+            code: "SECTION_NOT_FOUND",
+            message: "Section not found",
           },
         },
         404,
       );
     }
 
-    return context.json({ board: updatedBoard });
+    return context.json({ section: updatedSection });
   });
 
-  boardRoutes.delete("/boards/:boardId", async (context) => {
-    const parsedParams = boardParamsSchema.safeParse(context.req.param());
+  sectionRoutes.delete("/sections/:sectionId", async (context) => {
+    const parsedParams = sectionParamsSchema.safeParse(context.req.param());
 
     if (!parsedParams.success) {
       return context.json(
@@ -201,24 +221,24 @@ export function createBoardRoutes({
           error: {
             code: "VALIDATION_ERROR",
             fields: getFieldErrors(parsedParams.error),
-            message: "Invalid board ID",
+            message: "Invalid section ID",
           },
         },
         400,
       );
     }
 
-    const deletedBoard = await boardService.deleteBoard({
-      boardId: parsedParams.data.boardId,
+    const deletedSection = await sectionService.deleteSection({
+      sectionId: parsedParams.data.sectionId,
       userId: context.var.userId,
     });
 
-    if (!deletedBoard) {
+    if (!deletedSection) {
       return context.json(
         {
           error: {
-            code: "BOARD_NOT_FOUND",
-            message: "Board not found",
+            code: "SECTION_NOT_FOUND",
+            message: "Section not found",
           },
         },
         404,
@@ -228,5 +248,5 @@ export function createBoardRoutes({
     return context.body(null, 204);
   });
 
-  return boardRoutes;
+  return sectionRoutes;
 }

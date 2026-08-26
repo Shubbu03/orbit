@@ -2,52 +2,45 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
-import type { BoardService } from "../services/boards";
+import type { CommentService } from "../services/comments";
 
-const boardParamsSchema = z
+const commentParamsSchema = z
   .object({
-    boardId: z.uuid(),
+    commentId: z.uuid(),
   })
   .strict();
 
-const createBoardBodySchema = z
+const createCommentBodySchema = z
   .object({
-    organisationId: z.uuid(),
-    title: z.string().trim().min(1).max(100),
+    content: z.string().trim().min(1).max(5_000),
+    issueId: z.uuid(),
   })
   .strict();
 
-const updateBoardBodySchema = z
-  .object({
-    title: z.string().trim().min(1).max(100),
-  })
-  .strict();
+const updateCommentBodySchema = createCommentBodySchema.pick({ content: true });
 
-type BoardRoutesEnv = {
+type CommentRoutesEnv = {
   Variables: {
     userId: string;
   };
 };
 
-export type BoardRouteAuth = {
+export type CommentRouteAuth = {
   getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>;
 };
 
-type CreateBoardRoutesOptions = {
-  auth: BoardRouteAuth;
-  boardService: Pick<
-    BoardService,
-    "create" | "deleteBoard" | "listForUser" | "update"
-  >;
+type CreateCommentRoutesOptions = {
+  auth: CommentRouteAuth;
+  commentService: Pick<CommentService, "create" | "deleteComment" | "update">;
 };
 
-export function createBoardRoutes({
+export function createCommentRoutes({
   auth,
-  boardService,
-}: CreateBoardRoutesOptions) {
-  const boardRoutes = new Hono<BoardRoutesEnv>();
+  commentService,
+}: CreateCommentRoutesOptions) {
+  const commentRoutes = new Hono<CommentRoutesEnv>();
 
-  boardRoutes.use("*", async (context, next) => {
+  commentRoutes.use("*", async (context, next) => {
     const session = await auth.getSession(context.req.raw.headers);
 
     if (!session) {
@@ -66,7 +59,7 @@ export function createBoardRoutes({
     await next();
   });
 
-  boardRoutes.post("/boards", async (context) => {
+  commentRoutes.post("/comments", async (context) => {
     const contentType = context.req.header("content-type");
 
     if (!contentType?.toLowerCase().startsWith("application/json")) {
@@ -82,7 +75,7 @@ export function createBoardRoutes({
     }
 
     const body: unknown = await context.req.json().catch(() => null);
-    const parsedBody = createBoardBodySchema.safeParse(body);
+    const parsedBody = createCommentBodySchema.safeParse(body);
 
     if (!parsedBody.success) {
       return context.json(
@@ -97,36 +90,28 @@ export function createBoardRoutes({
       );
     }
 
-    const createdBoard = await boardService.create({
+    const createdComment = await commentService.create({
       ...parsedBody.data,
       userId: context.var.userId,
     });
 
-    if (!createdBoard) {
+    if (!createdComment) {
       return context.json(
         {
           error: {
-            code: "ORGANIZATION_NOT_FOUND",
-            message: "Organization not found",
+            code: "ISSUE_NOT_FOUND",
+            message: "Issue not found",
           },
         },
         404,
       );
     }
 
-    return context.json({ board: createdBoard }, 201);
+    return context.json({ comment: createdComment }, 201);
   });
 
-  boardRoutes.get("/boards", async (context) => {
-    const userBoards = await boardService.listForUser({
-      userId: context.var.userId,
-    });
-
-    return context.json({ boards: userBoards });
-  });
-
-  boardRoutes.put("/boards/:boardId", async (context) => {
-    const parsedParams = boardParamsSchema.safeParse(context.req.param());
+  commentRoutes.put("/comments/:commentId", async (context) => {
+    const parsedParams = commentParamsSchema.safeParse(context.req.param());
 
     if (!parsedParams.success) {
       return context.json(
@@ -134,7 +119,7 @@ export function createBoardRoutes({
           error: {
             code: "VALIDATION_ERROR",
             fields: getFieldErrors(parsedParams.error),
-            message: "Invalid board ID",
+            message: "Invalid comment ID",
           },
         },
         400,
@@ -156,7 +141,7 @@ export function createBoardRoutes({
     }
 
     const body: unknown = await context.req.json().catch(() => null);
-    const parsedBody = updateBoardBodySchema.safeParse(body);
+    const parsedBody = updateCommentBodySchema.safeParse(body);
 
     if (!parsedBody.success) {
       return context.json(
@@ -171,29 +156,29 @@ export function createBoardRoutes({
       );
     }
 
-    const updatedBoard = await boardService.update({
-      boardId: parsedParams.data.boardId,
-      title: parsedBody.data.title,
+    const updatedComment = await commentService.update({
+      commentId: parsedParams.data.commentId,
+      content: parsedBody.data.content,
       userId: context.var.userId,
     });
 
-    if (!updatedBoard) {
+    if (!updatedComment) {
       return context.json(
         {
           error: {
-            code: "BOARD_NOT_FOUND",
-            message: "Board not found",
+            code: "COMMENT_NOT_FOUND",
+            message: "Comment not found",
           },
         },
         404,
       );
     }
 
-    return context.json({ board: updatedBoard });
+    return context.json({ comment: updatedComment });
   });
 
-  boardRoutes.delete("/boards/:boardId", async (context) => {
-    const parsedParams = boardParamsSchema.safeParse(context.req.param());
+  commentRoutes.delete("/comments/:commentId", async (context) => {
+    const parsedParams = commentParamsSchema.safeParse(context.req.param());
 
     if (!parsedParams.success) {
       return context.json(
@@ -201,24 +186,24 @@ export function createBoardRoutes({
           error: {
             code: "VALIDATION_ERROR",
             fields: getFieldErrors(parsedParams.error),
-            message: "Invalid board ID",
+            message: "Invalid comment ID",
           },
         },
         400,
       );
     }
 
-    const deletedBoard = await boardService.deleteBoard({
-      boardId: parsedParams.data.boardId,
+    const deletedComment = await commentService.deleteComment({
+      commentId: parsedParams.data.commentId,
       userId: context.var.userId,
     });
 
-    if (!deletedBoard) {
+    if (!deletedComment) {
       return context.json(
         {
           error: {
-            code: "BOARD_NOT_FOUND",
-            message: "Board not found",
+            code: "COMMENT_NOT_FOUND",
+            message: "Comment not found",
           },
         },
         404,
@@ -228,5 +213,5 @@ export function createBoardRoutes({
     return context.body(null, 204);
   });
 
-  return boardRoutes;
+  return commentRoutes;
 }

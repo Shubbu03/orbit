@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { getFieldErrors } from "../lib/error";
 import type { IssueService } from "../services/issues";
 
 const issueParamsSchema = z
@@ -26,19 +27,6 @@ const updateIssueBodySchema = createIssueBodySchema.pick({
 const moveIssueBodySchema = createIssueBodySchema.pick({
   sectionId: true,
 });
-
-function getFieldErrors<T extends Record<string, unknown>>(
-  error: z.ZodError<T>,
-) {
-  const errorTree = z.treeifyError(error);
-
-  return Object.fromEntries(
-    Object.entries(errorTree.properties ?? {}).map(([field, fieldError]) => [
-      field,
-      fieldError?.errors ?? [],
-    ]),
-  );
-}
 
 type IssueRoutesEnv = {
   Variables: {

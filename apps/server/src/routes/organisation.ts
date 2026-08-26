@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 
+import { getFieldErrors } from "../lib/error";
 import type { OrganisationService } from "../services/organisation";
 
 const createOrganisationBodySchema = z
@@ -78,17 +79,11 @@ export function createOrganisationRoutes({
     const parsedBody = createOrganisationBodySchema.safeParse(body);
 
     if (!parsedBody.success) {
-      const errorTree = z.treeifyError(parsedBody.error);
-
       return context.json(
         {
           error: {
             code: "VALIDATION_ERROR",
-            fields: Object.fromEntries(
-              Object.entries(errorTree.properties ?? {}).map(
-                ([field, error]) => [field, error.errors],
-              ),
-            ),
+            fields: getFieldErrors(parsedBody.error),
             message: "Invalid request body",
           },
         },
@@ -124,10 +119,7 @@ export function createOrganisationRoutes({
           {
             error: {
               code: "VALIDATION_ERROR",
-              fields: {
-                organisationId:
-                  parsedParams.error.flatten().fieldErrors.organisationId ?? [],
-              },
+              fields: getFieldErrors(parsedParams.error),
               message: "Invalid organization ID",
             },
           },
