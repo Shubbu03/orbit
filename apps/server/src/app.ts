@@ -24,6 +24,9 @@ import type { IssueService } from "./services/issues";
 import type { MembershipService } from "./services/membership";
 import type { OrganisationService } from "./services/organisation";
 import type { SectionService } from "./services/sections";
+import type { BoardWebSocketAccess } from "./ws/access";
+import { createBoardWebSocketRoutes, type BoardWebSocketAuth } from "./ws";
+import type { BoardPresenceRooms } from "./ws/rooms";
 
 type CreateAppOptions = {
   auth: Pick<AuthModule, "handler"> &
@@ -33,7 +36,8 @@ type CreateAppOptions = {
     IssueRouteAuth &
     MembershipRouteAuth &
     OrganisationRouteAuth &
-    SectionRouteAuth;
+    SectionRouteAuth &
+    BoardWebSocketAuth;
   boardService: Pick<
     BoardService,
     "create" | "deleteBoard" | "listForUser" | "update"
@@ -54,6 +58,8 @@ type CreateAppOptions = {
     "create" | "deleteSection" | "listForUser" | "update"
   >;
   trustedOrigin: string;
+  webSocketAccess: Pick<BoardWebSocketAccess, "getBoardParticipant">;
+  webSocketRooms: Pick<BoardPresenceRooms, "join" | "leave">;
 };
 
 export function createApp({
@@ -66,8 +72,20 @@ export function createApp({
   organisationService,
   sectionService,
   trustedOrigin,
+  webSocketAccess,
+  webSocketRooms,
 }: CreateAppOptions) {
   const app = new Hono();
+
+  app.route(
+    "/ws",
+    createBoardWebSocketRoutes({
+      access: webSocketAccess,
+      auth,
+      rooms: webSocketRooms,
+      trustedOrigin,
+    }),
+  );
 
   app.use("*", secureHeaders());
 

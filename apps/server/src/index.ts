@@ -1,4 +1,5 @@
 import { createDatabase } from "@orbit/db";
+import { websocket } from "hono/bun";
 
 import { env } from "./env";
 import { createApp } from "./app";
@@ -10,6 +11,8 @@ import { createIssueService } from "./services/issues";
 import { createMembershipService } from "./services/membership";
 import { createOrganisationService } from "./services/organisation";
 import { createSectionService } from "./services/sections";
+import { createBoardWebSocketAccess } from "./ws/access";
+import { createBoardPresenceRooms } from "./ws/rooms";
 
 const database = createDatabase(env.DATABASE_URL);
 
@@ -31,6 +34,8 @@ const issueService = createIssueService(database);
 const commentService = createCommentService(database);
 const inviteService = createInviteService(database);
 const membershipService = createMembershipService(database);
+const webSocketAccess = createBoardWebSocketAccess(database);
+const webSocketRooms = createBoardPresenceRooms();
 
 const app = createApp({
   auth,
@@ -42,9 +47,12 @@ const app = createApp({
   organisationService,
   sectionService,
   trustedOrigin: env.TRUSTED_ORIGIN,
+  webSocketAccess,
+  webSocketRooms,
 });
 
 export default {
   port: env.PORT,
   fetch: app.fetch,
+  websocket,
 };
