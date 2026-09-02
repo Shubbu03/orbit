@@ -2,13 +2,19 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { CommentService } from "../services/comments";
+import { toCommentPayload } from "../ws/protocol";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const commentParamsSchema = z
   .object({
     commentId: z.uuid(),
   })
   .strict();
+
+const issueCommentsParamsSchema = z.object({ issueId: z.uuid() }).strict();
+const listCommentsQuerySchema = z.object(paginationQueryFields).strict();
 
 const createCommentBodySchema = z
   .object({
@@ -31,12 +37,17 @@ export type CommentRouteAuth = {
 
 type CreateCommentRoutesOptions = {
   auth: CommentRouteAuth;
-  commentService: Pick<CommentService, "create" | "deleteComment" | "update">;
+  commentService: Pick<
+    CommentService,
+    "create" | "deleteComment" | "listForIssue" | "update"
+  >;
+  eventPublisher: BoardEventPublisher;
 };
 
 export function createCommentRoutes({
   auth,
   commentService,
+  eventPublisher,
 }: CreateCommentRoutesOptions) {
   const commentRoutes = new Hono<CommentRoutesEnv>();
 
@@ -107,7 +118,66 @@ export function createCommentRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "comment.created",
+      boardId: createdComment.boardId,
+      comment: toCommentPayload(createdComment),
+    });
+
     return context.json({ comment: createdComment }, 201);
+  });
+
+  commentRoutes.get("/issues/:issueId/comments", async (context) => {
+    const parsedParams = issueCommentsParamsSchema.safeParse(
+      context.req.param(),
+    );
+    const parsedQuery = listCommentsQuerySchema.safeParse(context.req.query());
+
+    if (!parsedParams.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedParams.error),
+            message: "Invalid issue ID",
+          },
+        },
+        400,
+      );
+    }
+
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
+    const comments = await commentService.listForIssue({
+      ...parsedQuery.data,
+      issueId: parsedParams.data.issueId,
+      userId: context.var.userId,
+    });
+
+    if (!comments) {
+      return context.json(
+        {
+          error: {
+            code: "ISSUE_NOT_FOUND",
+            message: "Issue not found",
+          },
+        },
+        404,
+      );
+    }
+
+    return context.json({ comments: comments.items, page: comments.page });
   });
 
   commentRoutes.put("/comments/:commentId", async (context) => {
@@ -174,6 +244,12 @@ export function createCommentRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "comment.updated",
+      boardId: updatedComment.boardId,
+      comment: toCommentPayload(updatedComment),
+    });
+
     return context.json({ comment: updatedComment });
   });
 
@@ -209,6 +285,13 @@ export function createCommentRoutes({
         404,
       );
     }
+
+    eventPublisher.publish({
+      type: "comment.deleted",
+      boardId: deletedComment.boardId,
+      commentId: deletedComment.id,
+      issueId: deletedComment.issueId,
+    });
 
     return context.body(null, 204);
   });

@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { OrganisationService } from "../services/organisation";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const createOrganisationBodySchema = z
   .object({
@@ -17,12 +19,15 @@ const deleteOrganisationParamsSchema = z
   })
   .strict();
 
+const listOrganisationsQuerySchema = z.object(paginationQueryFields).strict();
+
 export type OrganisationRouteAuth = {
   getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>;
 };
 
 type CreateOrganisationRoutesOptions = {
   auth: OrganisationRouteAuth;
+  eventPublisher: BoardEventPublisher;
   organisationService: Pick<
     OrganisationService,
     "create" | "deleteOrganisation" | "listForUser"
@@ -37,6 +42,7 @@ type OrganisationRoutesEnv = {
 
 export function createOrganisationRoutes({
   auth,
+  eventPublisher,
   organisationService,
 }: CreateOrganisationRoutesOptions) {
   const organisationRoutes = new Hono<OrganisationRoutesEnv>();
@@ -100,11 +106,29 @@ export function createOrganisationRoutes({
   });
 
   organisationRoutes.get("/organisation", async (context) => {
-    const organizations = await organisationService.listForUser({
+    const parsedQuery = listOrganisationsQuerySchema.safeParse(
+      context.req.query(),
+    );
+
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
+    const result = await organisationService.listForUser({
+      ...parsedQuery.data,
       userId: context.var.userId,
     });
 
-    return context.json({ organizations });
+    return context.json({ organizations: result.items, page: result.page });
   });
 
   organisationRoutes.delete(
@@ -142,6 +166,10 @@ export function createOrganisationRoutes({
           },
           404,
         );
+      }
+
+      for (const boardId of deletedOrganisation.boardIds) {
+        eventPublisher.publish({ type: "board.deleted", boardId });
       }
 
       return context.body(null, 204);

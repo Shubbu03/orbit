@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
 import type { BoardWebSocketAccess } from "./access";
+import { clientWebSocketMessageSchema } from "./protocol";
 import type { BoardPresenceRooms } from "./rooms";
 
 const boardParamsSchema = z
@@ -12,6 +13,14 @@ const boardParamsSchema = z
   })
   .strict();
 
+function parseJson(value: string): unknown {
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+}
+
 export type BoardWebSocketAuth = {
   getSession: (headers: Headers) => Promise<{ user: { id: string } } | null>;
 };
@@ -19,7 +28,7 @@ export type BoardWebSocketAuth = {
 type CreateBoardWebSocketRoutesOptions = {
   access: Pick<BoardWebSocketAccess, "getBoardParticipant">;
   auth: BoardWebSocketAuth;
-  rooms: Pick<BoardPresenceRooms, "join" | "leave">;
+  rooms: Pick<BoardPresenceRooms, "join" | "leave" | "touch">;
   trustedOrigin: string;
 };
 
@@ -115,16 +124,43 @@ export function createBoardWebSocketRoutes({
           userId: participant.id,
         });
       },
-      onMessage: (_event, socket) => {
-        socket.close(1008, "Client messages are not supported");
+      onMessage: (event, socket) => {
+        if (typeof event.data !== "string") {
+          socket.close(1008, "Invalid client message");
+          return;
+        }
+
+        const data = parseJson(event.data);
+        const parsedMessage = clientWebSocketMessageSchema.safeParse(data);
+
+        if (!parsedMessage.success) {
+          socket.close(1008, "Invalid client message");
+          return;
+        }
+
+        const touched = rooms.touch({
+          boardId,
+          connectionId,
+          userId: participant.id,
+        });
+
+        if (!touched) {
+          socket.close(1008, "Connection is no longer registered");
+        }
       },
       onOpen: (_event, socket) => {
-        rooms.join({
+        const result = rooms.join({
           boardId,
           connectionId,
           socket,
           user: participant,
         });
+
+        if (result.status === "board_full") {
+          socket.close(1013, "Board connection limit reached");
+        } else if (result.status === "user_limit_reached") {
+          socket.close(1008, "User connection limit reached");
+        }
       },
     });
   });

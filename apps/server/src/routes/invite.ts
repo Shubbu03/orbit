@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
 import type { InviteService } from "../services/invite";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const inviteBodySchema = z
   .object({
@@ -27,11 +28,13 @@ export type InviteRouteAuth = {
 
 type CreateInviteRoutesOptions = {
   auth: InviteRouteAuth;
+  eventPublisher: BoardEventPublisher;
   inviteService: Pick<InviteService, "accept" | "invite">;
 };
 
 export function createInviteRoutes({
   auth,
+  eventPublisher,
   inviteService,
 }: CreateInviteRoutesOptions) {
   const inviteRoutes = new Hono<InviteRoutesEnv>();
@@ -183,6 +186,17 @@ export function createInviteRoutes({
         },
         404,
       );
+    }
+
+    if (result.status === "accepted") {
+      for (const boardId of result.boardIds) {
+        eventPublisher.publish({
+          type: "member.added",
+          boardId,
+          role: result.membership.role,
+          user: result.user,
+        });
+      }
     }
 
     return context.json({ membership: result.membership });

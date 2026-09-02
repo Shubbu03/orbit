@@ -1,5 +1,5 @@
 import type { DatabaseConnection } from "@orbit/db";
-import { membership, user } from "@orbit/db/schema";
+import { boards, membership, user } from "@orbit/db/schema";
 import { and, eq } from "drizzle-orm";
 
 type MembershipRecord = typeof membership.$inferSelect;
@@ -22,9 +22,12 @@ export type AcceptInvitationInput = {
 
 export type AcceptInvitationResult =
   | {
+      boardIds: string[];
       membership: MembershipRecord;
-      status: "accepted" | "already_accepted";
+      status: "accepted";
+      user: { id: string; image: string | null; name: string };
     }
+  | { membership: MembershipRecord; status: "already_accepted" }
   | { status: "not_found" };
 
 export function createInviteService(database: DatabaseConnection) {
@@ -104,41 +107,62 @@ export function createInviteService(database: DatabaseConnection) {
     accept: async (
       input: AcceptInvitationInput,
     ): Promise<AcceptInvitationResult> => {
-      const [acceptedMembership] = await database.database
-        .update(membership)
-        .set({ accepted: true })
-        .where(
-          and(
-            eq(membership.organisationId, input.organisationId),
-            eq(membership.userId, input.userId),
-            eq(membership.accepted, false),
-          ),
-        )
-        .returning();
+      return database.database.transaction(async (transaction) => {
+        const [acceptedMembership] = await transaction
+          .update(membership)
+          .set({ accepted: true })
+          .where(
+            and(
+              eq(membership.organisationId, input.organisationId),
+              eq(membership.userId, input.userId),
+              eq(membership.accepted, false),
+            ),
+          )
+          .returning();
 
-      if (acceptedMembership) {
-        return { membership: acceptedMembership, status: "accepted" };
-      }
+        if (acceptedMembership) {
+          const [acceptedUser] = await transaction
+            .select({ id: user.id, image: user.image, name: user.name })
+            .from(user)
+            .where(eq(user.id, input.userId))
+            .limit(1);
+          const organisationBoards = await transaction
+            .select({ id: boards.id })
+            .from(boards)
+            .where(eq(boards.organisationId, input.organisationId));
 
-      const [existingMembership] = await database.database
-        .select()
-        .from(membership)
-        .where(
-          and(
-            eq(membership.organisationId, input.organisationId),
-            eq(membership.userId, input.userId),
-          ),
-        )
-        .limit(1);
+          if (!acceptedUser) {
+            throw new Error("Accepted invitation user was not found");
+          }
 
-      if (existingMembership?.accepted) {
-        return {
-          membership: existingMembership,
-          status: "already_accepted",
-        };
-      }
+          return {
+            boardIds: organisationBoards.map((board) => board.id),
+            membership: acceptedMembership,
+            status: "accepted",
+            user: acceptedUser,
+          };
+        }
 
-      return { status: "not_found" };
+        const [existingMembership] = await transaction
+          .select()
+          .from(membership)
+          .where(
+            and(
+              eq(membership.organisationId, input.organisationId),
+              eq(membership.userId, input.userId),
+            ),
+          )
+          .limit(1);
+
+        if (existingMembership?.accepted) {
+          return {
+            membership: existingMembership,
+            status: "already_accepted",
+          };
+        }
+
+        return { status: "not_found" };
+      });
     },
   };
 }

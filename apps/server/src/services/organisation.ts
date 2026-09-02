@@ -1,6 +1,8 @@
 import type { DatabaseConnection } from "@orbit/db";
-import { membership, organisation } from "@orbit/db/schema";
-import { and, eq, exists } from "drizzle-orm";
+import { boards, membership, organisation } from "@orbit/db/schema";
+import { and, eq } from "drizzle-orm";
+
+import { createPage, type PaginationInput } from "../lib/pagination";
 
 export type CreateOrganisationInput = {
   description: string;
@@ -8,7 +10,7 @@ export type CreateOrganisationInput = {
   ownerUserId: string;
 };
 
-export type ListUserOrganisationsInput = {
+export type ListUserOrganisationsInput = PaginationInput & {
   userId: string;
 };
 
@@ -58,6 +60,8 @@ export function createOrganisationService(database: DatabaseConnection) {
             desc(currentMembership.createdAt),
             desc(currentMembership.id),
           ],
+          limit: input.limit + 1,
+          offset: input.offset,
           where: (currentMembership, { and, eq }) =>
             and(
               eq(currentMembership.userId, input.userId),
@@ -76,38 +80,54 @@ export function createOrganisationService(database: DatabaseConnection) {
           },
         });
 
-      return acceptedMemberships.map(
-        ({ organisation: currentOrganisation, role }) => ({
-          ...currentOrganisation,
-          role,
-        }),
+      return createPage(
+        acceptedMemberships.map(
+          ({ organisation: currentOrganisation, role }) => ({
+            ...currentOrganisation,
+            role,
+          }),
+        ),
+        input,
       );
     },
 
     deleteOrganisation: async (input: DeleteOrganisationInput) => {
-      const acceptedAdminMembership = database.database
-        .select({ id: membership.id })
-        .from(membership)
-        .where(
-          and(
-            eq(membership.organisationId, organisation.id),
-            eq(membership.userId, input.userId),
-            eq(membership.accepted, true),
-            eq(membership.role, "admin"),
-          ),
-        );
+      return database.database.transaction(async (transaction) => {
+        const [acceptedAdminMembership] = await transaction
+          .select({ id: membership.id })
+          .from(organisation)
+          .innerJoin(membership, eq(membership.organisationId, organisation.id))
+          .where(
+            and(
+              eq(organisation.id, input.organisationId),
+              eq(membership.userId, input.userId),
+              eq(membership.accepted, true),
+              eq(membership.role, "admin"),
+            ),
+          )
+          .limit(1)
+          .for("update");
 
-      const [deletedOrganisation] = await database.database
-        .delete(organisation)
-        .where(
-          and(
-            eq(organisation.id, input.organisationId),
-            exists(acceptedAdminMembership),
-          ),
-        )
-        .returning({ id: organisation.id });
+        if (!acceptedAdminMembership) {
+          return null;
+        }
 
-      return deletedOrganisation ?? null;
+        const organisationBoards = await transaction
+          .select({ id: boards.id })
+          .from(boards)
+          .where(eq(boards.organisationId, input.organisationId));
+        const [deletedOrganisation] = await transaction
+          .delete(organisation)
+          .where(eq(organisation.id, input.organisationId))
+          .returning({ id: organisation.id });
+
+        return deletedOrganisation
+          ? {
+              ...deletedOrganisation,
+              boardIds: organisationBoards.map((board) => board.id),
+            }
+          : null;
+      });
     },
   };
 }

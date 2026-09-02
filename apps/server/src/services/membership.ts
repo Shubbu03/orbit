@@ -8,20 +8,28 @@ import {
 } from "@orbit/db/schema";
 import { and, asc, eq, exists } from "drizzle-orm";
 
+import { createPage, type PaginationInput } from "../lib/pagination";
+
 export type RemoveMembershipInput = {
   organisationId: string;
   targetUserId: string;
   userId: string;
 };
 
-export type ListMembershipsInput = {
+export type ListMembershipsInput = PaginationInput & {
   organisationId: string;
   userId: string;
 };
 
 export type RemoveMembershipResult =
-  | { membershipId: string; status: "removed" }
-  | { status: "last_admin" | "not_found" };
+  | {
+      boardIds: string[];
+      membershipId: string;
+      status: "removed";
+      targetUserId: string;
+    }
+  | { status: "last_admin" }
+  | { status: "not_found" };
 
 export function createMembershipService(database: DatabaseConnection) {
   return {
@@ -52,7 +60,7 @@ export function createMembershipService(database: DatabaseConnection) {
                 eq(membership.accepted, true),
               );
 
-        return transaction
+        const membershipsForPage = await transaction
           .select({
             accepted: membership.accepted,
             createdAt: membership.createdAt,
@@ -71,7 +79,11 @@ export function createMembershipService(database: DatabaseConnection) {
           .from(membership)
           .innerJoin(user, eq(user.id, membership.userId))
           .where(visibilityCondition)
-          .orderBy(asc(membership.createdAt), asc(membership.id));
+          .orderBy(asc(membership.createdAt), asc(membership.id))
+          .limit(input.limit + 1)
+          .offset(input.offset);
+
+        return createPage(membershipsForPage, input);
       });
     },
 
@@ -124,6 +136,11 @@ export function createMembershipService(database: DatabaseConnection) {
           return { status: "last_admin" };
         }
 
+        const organisationBoards = await transaction
+          .select({ id: boards.id })
+          .from(boards)
+          .where(eq(boards.organisationId, input.organisationId));
+
         const issueBelongsToOrganisation = transaction
           .select({ id: issues.id })
           .from(issues)
@@ -154,8 +171,10 @@ export function createMembershipService(database: DatabaseConnection) {
         }
 
         return {
+          boardIds: organisationBoards.map((board) => board.id),
           membershipId: removedMembership.id,
           status: "removed",
+          targetUserId: targetMembership.userId,
         };
       });
     },

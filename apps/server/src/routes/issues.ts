@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { IssueService } from "../services/issues";
+import { toIssuePayload } from "../ws/protocol";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const issueParamsSchema = z
   .object({
@@ -24,9 +27,22 @@ const updateIssueBodySchema = createIssueBodySchema.pick({
   title: true,
 });
 
-const moveIssueBodySchema = createIssueBodySchema.pick({
-  sectionId: true,
-});
+const moveIssueBodySchema = createIssueBodySchema
+  .pick({
+    sectionId: true,
+  })
+  .extend({
+    position: z.number().int().min(0),
+  });
+
+const listIssuesQuerySchema = z
+  .object({
+    boardId: z.uuid().optional(),
+    ...paginationQueryFields,
+  })
+  .strict();
+
+const issueCommentsQuerySchema = z.object(paginationQueryFields).strict();
 
 type IssueRoutesEnv = {
   Variables: {
@@ -40,6 +56,7 @@ export type IssueRouteAuth = {
 
 type CreateIssueRoutesOptions = {
   auth: IssueRouteAuth;
+  eventPublisher: BoardEventPublisher;
   issueService: Pick<
     IssueService,
     "create" | "deleteIssue" | "getById" | "listForUser" | "move" | "update"
@@ -48,6 +65,7 @@ type CreateIssueRoutesOptions = {
 
 export function createIssueRoutes({
   auth,
+  eventPublisher,
   issueService,
 }: CreateIssueRoutesOptions) {
   const issueRoutes = new Hono<IssueRoutesEnv>();
@@ -119,19 +137,46 @@ export function createIssueRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "issue.created",
+      boardId: createdIssue.boardId,
+      issue: toIssuePayload(createdIssue),
+    });
+
     return context.json({ issue: createdIssue }, 201);
   });
 
   issueRoutes.get("/issues", async (context) => {
+    const parsedQuery = listIssuesQuerySchema.safeParse(context.req.query());
+
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
     const userIssues = await issueService.listForUser({
+      limit: parsedQuery.data.limit,
+      offset: parsedQuery.data.offset,
+      ...(parsedQuery.data.boardId
+        ? { boardId: parsedQuery.data.boardId }
+        : {}),
       userId: context.var.userId,
     });
 
-    return context.json({ issues: userIssues });
+    return context.json({ issues: userIssues.items, page: userIssues.page });
   });
 
   issueRoutes.get("/issues/:issueId", async (context) => {
     const parsedParams = issueParamsSchema.safeParse(context.req.param());
+    const parsedQuery = issueCommentsQuerySchema.safeParse(context.req.query());
 
     if (!parsedParams.success) {
       return context.json(
@@ -146,7 +191,21 @@ export function createIssueRoutes({
       );
     }
 
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
     const issue = await issueService.getById({
+      ...parsedQuery.data,
       issueId: parsedParams.data.issueId,
       userId: context.var.userId,
     });
@@ -230,6 +289,12 @@ export function createIssueRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "issue.updated",
+      boardId: updatedIssue.boardId,
+      issue: toIssuePayload(updatedIssue),
+    });
+
     return context.json({ issue: updatedIssue });
   });
 
@@ -281,6 +346,7 @@ export function createIssueRoutes({
 
     const movedIssue = await issueService.move({
       issueId: parsedParams.data.issueId,
+      position: parsedBody.data.position,
       sectionId: parsedBody.data.sectionId,
       userId: context.var.userId,
     });
@@ -296,6 +362,15 @@ export function createIssueRoutes({
         404,
       );
     }
+
+    eventPublisher.publish({
+      type: "issue.moved",
+      boardId: movedIssue.boardId,
+      issueId: movedIssue.id,
+      position: movedIssue.position,
+      sectionId: movedIssue.sectionId,
+      updatedAt: movedIssue.updatedAt.toISOString(),
+    });
 
     return context.json({ issue: movedIssue });
   });
@@ -332,6 +407,12 @@ export function createIssueRoutes({
         404,
       );
     }
+
+    eventPublisher.publish({
+      type: "issue.deleted",
+      boardId: deletedIssue.boardId,
+      issueId: deletedIssue.id,
+    });
 
     return context.body(null, 204);
   });

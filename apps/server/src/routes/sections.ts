@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { SectionService } from "../services/sections";
+import { toSectionPayload } from "../ws/protocol";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const sectionParamsSchema = z
   .object({
@@ -19,9 +22,16 @@ const createSectionBodySchema = z
 
 const updateSectionBodySchema = createSectionBodySchema.pick({ title: true });
 
+const moveSectionBodySchema = z
+  .object({
+    position: z.number().int().min(0),
+  })
+  .strict();
+
 const listSectionsQuerySchema = z
   .object({
     boardId: z.uuid().optional(),
+    ...paginationQueryFields,
   })
   .strict();
 
@@ -37,14 +47,16 @@ export type SectionRouteAuth = {
 
 type CreateSectionRoutesOptions = {
   auth: SectionRouteAuth;
+  eventPublisher: BoardEventPublisher;
   sectionService: Pick<
     SectionService,
-    "create" | "deleteSection" | "listForUser" | "update"
+    "create" | "deleteSection" | "listForUser" | "move" | "update"
   >;
 };
 
 export function createSectionRoutes({
   auth,
+  eventPublisher,
   sectionService,
 }: CreateSectionRoutesOptions) {
   const sectionRoutes = new Hono<SectionRoutesEnv>();
@@ -116,6 +128,12 @@ export function createSectionRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "section.created",
+      boardId: createdSection.boardId,
+      section: toSectionPayload(createdSection),
+    });
+
     return context.json({ section: createdSection }, 201);
   });
 
@@ -136,13 +154,18 @@ export function createSectionRoutes({
     }
 
     const userSections = await sectionService.listForUser({
+      limit: parsedQuery.data.limit,
+      offset: parsedQuery.data.offset,
       ...(parsedQuery.data.boardId
         ? { boardId: parsedQuery.data.boardId }
         : {}),
       userId: context.var.userId,
     });
 
-    return context.json({ sections: userSections });
+    return context.json({
+      sections: userSections.items,
+      page: userSections.page,
+    });
   });
 
   sectionRoutes.put("/sections/:sectionId", async (context) => {
@@ -209,7 +232,88 @@ export function createSectionRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "section.updated",
+      boardId: updatedSection.boardId,
+      section: toSectionPayload(updatedSection),
+    });
+
     return context.json({ section: updatedSection });
+  });
+
+  sectionRoutes.put("/sections/:sectionId/move", async (context) => {
+    const parsedParams = sectionParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedParams.error),
+            message: "Invalid section ID",
+          },
+        },
+        400,
+      );
+    }
+
+    const contentType = context.req.header("content-type");
+
+    if (!contentType?.toLowerCase().startsWith("application/json")) {
+      return context.json(
+        {
+          error: {
+            code: "UNSUPPORTED_MEDIA_TYPE",
+            message: "Content-Type must be application/json",
+          },
+        },
+        415,
+      );
+    }
+
+    const body: unknown = await context.req.json().catch(() => null);
+    const parsedBody = moveSectionBodySchema.safeParse(body);
+
+    if (!parsedBody.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedBody.error),
+            message: "Invalid request body",
+          },
+        },
+        400,
+      );
+    }
+
+    const movedSection = await sectionService.move({
+      position: parsedBody.data.position,
+      sectionId: parsedParams.data.sectionId,
+      userId: context.var.userId,
+    });
+
+    if (!movedSection) {
+      return context.json(
+        {
+          error: {
+            code: "SECTION_NOT_FOUND",
+            message: "Section not found",
+          },
+        },
+        404,
+      );
+    }
+
+    eventPublisher.publish({
+      type: "section.moved",
+      boardId: movedSection.boardId,
+      position: movedSection.position,
+      sectionId: movedSection.id,
+      updatedAt: movedSection.updatedAt.toISOString(),
+    });
+
+    return context.json({ section: movedSection });
   });
 
   sectionRoutes.delete("/sections/:sectionId", async (context) => {
@@ -244,6 +348,12 @@ export function createSectionRoutes({
         404,
       );
     }
+
+    eventPublisher.publish({
+      type: "section.deleted",
+      boardId: deletedSection.boardId,
+      sectionId: deletedSection.id,
+    });
 
     return context.body(null, 204);
   });

@@ -1,6 +1,9 @@
 import type { DatabaseConnection } from "@orbit/db";
 import { boards, membership, sections } from "@orbit/db/schema";
-import { and, asc, eq, exists } from "drizzle-orm";
+import { and, asc, eq, exists, max } from "drizzle-orm";
+
+import { createPage, type PaginationInput } from "../lib/pagination";
+import { reorderItems } from "./ordering";
 
 export type CreateSectionInput = {
   boardId: string;
@@ -8,7 +11,7 @@ export type CreateSectionInput = {
   userId: string;
 };
 
-export type ListUserSectionsInput = {
+export type ListUserSectionsInput = PaginationInput & {
   boardId?: string;
   userId: string;
 };
@@ -20,6 +23,12 @@ export type UpdateSectionInput = {
 };
 
 export type DeleteSectionInput = {
+  sectionId: string;
+  userId: string;
+};
+
+export type MoveSectionInput = {
+  position: number;
   sectionId: string;
   userId: string;
 };
@@ -64,11 +73,17 @@ export function createSectionService(database: DatabaseConnection) {
           return null;
         }
 
+        const [currentPosition] = await transaction
+          .select({ maximum: max(sections.position) })
+          .from(sections)
+          .where(eq(sections.boardId, input.boardId));
+
         const [createdSection] = await transaction
           .insert(sections)
           .values({
             boardId: input.boardId,
             id: crypto.randomUUID(),
+            position: (currentPosition?.maximum ?? -1) + 1,
             title: input.title,
           })
           .returning();
@@ -88,11 +103,12 @@ export function createSectionService(database: DatabaseConnection) {
         eq(membership.accepted, true),
       ];
 
-      return database.database
+      const userSections = await database.database
         .select({
           boardId: sections.boardId,
           createdAt: sections.createdAt,
           id: sections.id,
+          position: sections.position,
           title: sections.title,
           updatedAt: sections.updatedAt,
         })
@@ -102,9 +118,13 @@ export function createSectionService(database: DatabaseConnection) {
         .where(input.boardId ? eq(sections.boardId, input.boardId) : undefined)
         .orderBy(
           asc(sections.boardId),
-          asc(sections.createdAt),
+          asc(sections.position),
           asc(sections.id),
-        );
+        )
+        .limit(input.limit + 1)
+        .offset(input.offset);
+
+      return createPage(userSections, input);
     },
 
     update: async (input: UpdateSectionInput) => {
@@ -122,6 +142,69 @@ export function createSectionService(database: DatabaseConnection) {
       return updatedSection ?? null;
     },
 
+    move: async (input: MoveSectionInput) => {
+      return database.database.transaction(async (transaction) => {
+        const [authorizedSection] = await transaction
+          .select({ boardId: sections.boardId, id: sections.id })
+          .from(sections)
+          .innerJoin(boards, eq(boards.id, sections.boardId))
+          .innerJoin(
+            membership,
+            and(
+              eq(membership.organisationId, boards.organisationId),
+              eq(membership.userId, input.userId),
+              eq(membership.accepted, true),
+              eq(membership.role, "admin"),
+            ),
+          )
+          .where(eq(sections.id, input.sectionId))
+          .limit(1)
+          .for("update");
+
+        if (!authorizedSection) {
+          return null;
+        }
+
+        const currentSections = await transaction
+          .select({ id: sections.id, position: sections.position })
+          .from(sections)
+          .where(eq(sections.boardId, authorizedSection.boardId))
+          .orderBy(asc(sections.position), asc(sections.id))
+          .for("update");
+
+        const reordered = reorderItems(
+          currentSections,
+          authorizedSection.id,
+          input.position,
+        );
+
+        if (!reordered) {
+          return null;
+        }
+
+        for (const [position, currentSection] of reordered.items.entries()) {
+          if (currentSection.position !== position) {
+            await transaction
+              .update(sections)
+              .set({ position })
+              .where(eq(sections.id, currentSection.id));
+          }
+        }
+
+        const [movedSection] = await transaction
+          .select()
+          .from(sections)
+          .where(eq(sections.id, authorizedSection.id))
+          .limit(1);
+
+        if (!movedSection) {
+          throw new Error("Moved section was not found");
+        }
+
+        return movedSection;
+      });
+    },
+
     deleteSection: async (input: DeleteSectionInput) => {
       const [deletedSection] = await database.database
         .delete(sections)
@@ -131,7 +214,7 @@ export function createSectionService(database: DatabaseConnection) {
             exists(acceptedAdminMembershipForSection(input.userId)),
           ),
         )
-        .returning({ id: sections.id });
+        .returning({ boardId: sections.boardId, id: sections.id });
 
       return deletedSection ?? null;
     },

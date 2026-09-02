@@ -2,7 +2,9 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { MembershipService } from "../services/membership";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const removeMembershipBodySchema = z
   .object({
@@ -11,9 +13,9 @@ const removeMembershipBodySchema = z
   })
   .strict();
 
-const listMembershipsQuerySchema = removeMembershipBodySchema.pick({
-  organisationId: true,
-});
+const listMembershipsQuerySchema = removeMembershipBodySchema
+  .pick({ organisationId: true })
+  .extend(paginationQueryFields);
 
 type MembershipRoutesEnv = {
   Variables: {
@@ -27,11 +29,13 @@ export type MembershipRouteAuth = {
 
 type CreateMembershipRoutesOptions = {
   auth: MembershipRouteAuth;
+  eventPublisher: BoardEventPublisher;
   membershipService: Pick<MembershipService, "listForUser" | "remove">;
 };
 
 export function createMembershipRoutes({
   auth,
+  eventPublisher,
   membershipService,
 }: CreateMembershipRoutesOptions) {
   const membershipRoutes = new Hono<MembershipRoutesEnv>();
@@ -74,6 +78,8 @@ export function createMembershipRoutes({
     }
 
     const memberships = await membershipService.listForUser({
+      limit: parsedQuery.data.limit,
+      offset: parsedQuery.data.offset,
       organisationId: parsedQuery.data.organisationId,
       userId: context.var.userId,
     });
@@ -90,7 +96,10 @@ export function createMembershipRoutes({
       );
     }
 
-    return context.json({ memberships });
+    return context.json({
+      memberships: memberships.items,
+      page: memberships.page,
+    });
   });
 
   membershipRoutes.delete("/membership", async (context) => {
@@ -152,6 +161,14 @@ export function createMembershipRoutes({
         },
         404,
       );
+    }
+
+    for (const boardId of result.boardIds) {
+      eventPublisher.publish({
+        type: "member.removed",
+        boardId,
+        userId: result.targetUserId,
+      });
     }
 
     return context.body(null, 204);

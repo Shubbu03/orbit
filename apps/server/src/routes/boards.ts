@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 
 import { getFieldErrors } from "../lib/error";
+import { paginationQueryFields } from "../lib/pagination";
 import type { BoardService } from "../services/boards";
+import { toBoardPayload } from "../ws/protocol";
+import type { BoardEventPublisher } from "../ws/publisher";
 
 const boardParamsSchema = z
   .object({
@@ -23,6 +26,8 @@ const updateBoardBodySchema = z
   })
   .strict();
 
+const listBoardsQuerySchema = z.object(paginationQueryFields).strict();
+
 type BoardRoutesEnv = {
   Variables: {
     userId: string;
@@ -37,13 +42,15 @@ type CreateBoardRoutesOptions = {
   auth: BoardRouteAuth;
   boardService: Pick<
     BoardService,
-    "create" | "deleteBoard" | "listForUser" | "update"
+    "create" | "deleteBoard" | "getById" | "listForUser" | "update"
   >;
+  eventPublisher: BoardEventPublisher;
 };
 
 export function createBoardRoutes({
   auth,
   boardService,
+  eventPublisher,
 }: CreateBoardRoutesOptions) {
   const boardRoutes = new Hono<BoardRoutesEnv>();
 
@@ -118,11 +125,63 @@ export function createBoardRoutes({
   });
 
   boardRoutes.get("/boards", async (context) => {
-    const userBoards = await boardService.listForUser({
+    const parsedQuery = listBoardsQuerySchema.safeParse(context.req.query());
+
+    if (!parsedQuery.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedQuery.error),
+            message: "Invalid query parameters",
+          },
+        },
+        400,
+      );
+    }
+
+    const result = await boardService.listForUser({
+      ...parsedQuery.data,
       userId: context.var.userId,
     });
 
-    return context.json({ boards: userBoards });
+    return context.json({ boards: result.items, page: result.page });
+  });
+
+  boardRoutes.get("/boards/:boardId", async (context) => {
+    const parsedParams = boardParamsSchema.safeParse(context.req.param());
+
+    if (!parsedParams.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedParams.error),
+            message: "Invalid board ID",
+          },
+        },
+        400,
+      );
+    }
+
+    const board = await boardService.getById({
+      boardId: parsedParams.data.boardId,
+      userId: context.var.userId,
+    });
+
+    if (!board) {
+      return context.json(
+        {
+          error: {
+            code: "BOARD_NOT_FOUND",
+            message: "Board not found",
+          },
+        },
+        404,
+      );
+    }
+
+    return context.json({ board });
   });
 
   boardRoutes.put("/boards/:boardId", async (context) => {
@@ -189,6 +248,12 @@ export function createBoardRoutes({
       );
     }
 
+    eventPublisher.publish({
+      type: "board.updated",
+      boardId: updatedBoard.id,
+      board: toBoardPayload(updatedBoard),
+    });
+
     return context.json({ board: updatedBoard });
   });
 
@@ -224,6 +289,11 @@ export function createBoardRoutes({
         404,
       );
     }
+
+    eventPublisher.publish({
+      type: "board.deleted",
+      boardId: deletedBoard.id,
+    });
 
     return context.body(null, 204);
   });
