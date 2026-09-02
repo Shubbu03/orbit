@@ -29,6 +29,13 @@
       "when": 1787652142648,
       "tag": "20260825100222_stabilize_section_composite_key",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1788342916459,
+      "tag": "20260902095516_add-kanban-positions",
+      "breakpoints": true
     }
   ]
 }

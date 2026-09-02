@@ -7,8 +7,10 @@
     "./schema": "./src/schema/index.ts"
   },
   "scripts": {
+    "generate": "drizzle-kit generate",
     "lint": "eslint . --max-warnings 0",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "migrate": "drizzle-kit migrate"
   },
   "dependencies": {
     "dotenv": "^17.4.2",

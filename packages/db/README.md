@@ -1,13 +1,14 @@
-# db
+# Orbit database
 
-To install dependencies:
+PostgreSQL schema and Drizzle migrations shared by the Orbit server.
 
-```bash
-bun install
+```sh
+cp .env.example .env
+bun run generate --name <migration-name>
+bun run migrate
 ```
 
-To run:
-
-```bash
-bun run index.ts
-```
+`generate` creates a reviewed migration from schema changes. `migrate` applies
+all pending migrations to the database configured by `DATABASE_URL`. Prefer
+migrations over `drizzle-kit push` for environments whose history must be
+repeatable and reviewable.
