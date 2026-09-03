@@ -18,6 +18,7 @@ export type CreateBoardInput = {
 };
 
 export type ListUserBoardsInput = PaginationInput & {
+  organisationId?: string;
   userId: string;
 };
 
@@ -94,6 +95,11 @@ export function createBoardService(database: DatabaseConnection) {
             eq(membership.userId, input.userId),
             eq(membership.accepted, true),
           ),
+        )
+        .where(
+          input.organisationId
+            ? eq(boards.organisationId, input.organisationId)
+            : undefined,
         )
         .orderBy(desc(boards.createdAt), desc(boards.id))
         .limit(input.limit + 1)

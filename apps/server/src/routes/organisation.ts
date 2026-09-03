@@ -13,7 +13,7 @@ const createOrganisationBodySchema = z
   })
   .strict();
 
-const deleteOrganisationParamsSchema = z
+const organisationParamsSchema = z
   .object({
     organisationId: z.uuid(),
   })
@@ -30,7 +30,7 @@ type CreateOrganisationRoutesOptions = {
   eventPublisher: BoardEventPublisher;
   organisationService: Pick<
     OrganisationService,
-    "create" | "deleteOrganisation" | "listForUser"
+    "create" | "deleteOrganisation" | "getById" | "listForUser"
   >;
 };
 
@@ -131,10 +131,48 @@ export function createOrganisationRoutes({
     return context.json({ organizations: result.items, page: result.page });
   });
 
+  organisationRoutes.get("/organisation/:organisationId", async (context) => {
+    const parsedParams = organisationParamsSchema.safeParse(
+      context.req.param(),
+    );
+
+    if (!parsedParams.success) {
+      return context.json(
+        {
+          error: {
+            code: "VALIDATION_ERROR",
+            fields: getFieldErrors(parsedParams.error),
+            message: "Invalid organization ID",
+          },
+        },
+        400,
+      );
+    }
+
+    const currentOrganisation = await organisationService.getById({
+      organisationId: parsedParams.data.organisationId,
+      userId: context.var.userId,
+    });
+
+    if (!currentOrganisation) {
+      return context.json(
+        {
+          error: {
+            code: "ORGANIZATION_NOT_FOUND",
+            message: "Organization not found",
+          },
+        },
+        404,
+      );
+    }
+
+    return context.json({ organization: currentOrganisation });
+  });
+
   organisationRoutes.delete(
     "/organisation/:organisationId",
     async (context) => {
-      const parsedParams = deleteOrganisationParamsSchema.safeParse(
+      const parsedParams = organisationParamsSchema.safeParse(
         context.req.param(),
       );
 

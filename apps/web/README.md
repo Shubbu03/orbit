@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/create-next-app).
+# Orbit web
 
-## Getting Started
+The Orbit frontend is a Next.js App Router application. It uses Tailwind CSS
+v4, TanStack Query, Xior, Zod, Phosphor Icons, and Better Auth.
 
-First, run the development server:
+## Local development
+
+Copy `.env.example` to `.env.local`, then start the monorepo from its root:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+bun run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The web app expects the API at `NEXT_PUBLIC_API_ORIGIN` and sends session
+cookies with every browser request.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Structure
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load Inter, a custom Google Font.
+- `app/` owns routes, layouts, providers, and route-level states.
+- `features/` owns user-facing feature composition and UI.
+- `lib/api/` owns browser/server Xior clients, runtime response validation, and
+  normalized API errors.
+- `@orbit/contracts` is the shared source of truth for API entities and
+  WebSocket messages.
 
-## Learn More
+## Checks
 
-To learn more about Next.js, take a look at the following resources:
+Run these from the monorepo root:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+bun run check-types
+bun run lint
+bun run test
+bun run build
+```

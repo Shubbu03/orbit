@@ -26,7 +26,12 @@ const updateBoardBodySchema = z
   })
   .strict();
 
-const listBoardsQuerySchema = z.object(paginationQueryFields).strict();
+const listBoardsQuerySchema = z
+  .object({
+    ...paginationQueryFields,
+    organisationId: z.uuid().optional(),
+  })
+  .strict();
 
 type BoardRoutesEnv = {
   Variables: {

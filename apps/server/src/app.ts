@@ -66,7 +66,7 @@ type CreateAppOptions = {
   >;
   organisationService: Pick<
     OrganisationService,
-    "create" | "deleteOrganisation" | "listForUser"
+    "create" | "deleteOrganisation" | "getById" | "listForUser"
   >;
   membershipService: Pick<MembershipService, "listForUser" | "remove">;
   logger: Logger;

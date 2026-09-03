@@ -14,6 +14,11 @@ export type ListUserOrganisationsInput = PaginationInput & {
   userId: string;
 };
 
+export type GetOrganisationInput = {
+  organisationId: string;
+  userId: string;
+};
+
 export type DeleteOrganisationInput = {
   organisationId: string;
   userId: string;
@@ -89,6 +94,31 @@ export function createOrganisationService(database: DatabaseConnection) {
         ),
         input,
       );
+    },
+
+    getById: async (input: GetOrganisationInput) => {
+      const [currentOrganisation] = await database.database
+        .select({
+          createdAt: organisation.createdAt,
+          description: organisation.description,
+          id: organisation.id,
+          name: organisation.name,
+          role: membership.role,
+          updatedAt: organisation.updatedAt,
+        })
+        .from(organisation)
+        .innerJoin(
+          membership,
+          and(
+            eq(membership.organisationId, organisation.id),
+            eq(membership.userId, input.userId),
+            eq(membership.accepted, true),
+          ),
+        )
+        .where(eq(organisation.id, input.organisationId))
+        .limit(1);
+
+      return currentOrganisation ?? null;
     },
 
     deleteOrganisation: async (input: DeleteOrganisationInput) => {

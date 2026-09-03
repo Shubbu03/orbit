@@ -1,30 +1,31 @@
-import type { Metadata } from "next";
-import localFont from "next/font/local";
+import type { Metadata, Viewport } from "next";
+
+import { AppProviders } from "./providers";
 import "./globals.css";
 
-const geistSans = localFont({
-  src: "./fonts/GeistVF.woff",
-  variable: "--font-geist-sans",
-});
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-});
-
 export const metadata: Metadata = {
-  title: "Orbit — Issue command center",
-  description: "Plan, assign, and ship work from one focused issue tracker.",
+  title: {
+    default: "Orbit — Work in motion",
+    template: "%s · Orbit",
+  },
+  description:
+    "A realtime issue tracker that keeps teams, decisions, and delivery in the same orbit.",
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { color: "#fff5f5", media: "(prefers-color-scheme: light)" },
+    { color: "#2e2b2c", media: "(prefers-color-scheme: dark)" },
+  ],
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
-        {children}
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

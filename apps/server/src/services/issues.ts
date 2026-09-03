@@ -8,7 +8,7 @@ import {
   sections,
   user,
 } from "@orbit/db/schema";
-import { and, asc, eq, exists, inArray, max } from "drizzle-orm";
+import { and, asc, desc, eq, exists, inArray, max } from "drizzle-orm";
 
 import { createPage, type PaginationInput } from "../lib/pagination";
 import { reorderItems } from "./ordering";
@@ -201,7 +201,7 @@ export function createIssueService(database: DatabaseConnection) {
         .from(comments)
         .innerJoin(user, eq(user.id, comments.userId))
         .where(eq(comments.issueId, issue.id))
-        .orderBy(asc(comments.createdAt), asc(comments.id))
+        .orderBy(desc(comments.createdAt), desc(comments.id))
         .limit(input.limit + 1)
         .offset(input.offset);
 
