@@ -16,7 +16,7 @@ const issueParamsSchema = z
 const createIssueBodySchema = z
   .object({
     boardId: z.uuid(),
-    description: z.string().trim().min(1).max(5_000),
+    description: z.string().trim().max(5_000),
     sectionId: z.uuid(),
     title: z.string().trim().min(1).max(200),
   })

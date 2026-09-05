@@ -1,14 +1,24 @@
 "use client";
 
-import type { BoardDetails, Person } from "@orbit/contracts/entities";
+import type {
+  BoardDetails,
+  BoardResponse,
+  Person,
+} from "@orbit/contracts/entities";
 import {
   closestCorners,
   DndContext,
+  DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  pointerWithin,
+  rectIntersection,
+  TouchSensor,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
 } from "@dnd-kit/core";
 import {
   horizontalListSortingStrategy,
@@ -20,25 +30,29 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   ArrowLeftIcon,
-  CheckCircleIcon,
   DotsSixVerticalIcon,
-  KanbanIcon,
+  TextAlignLeftIcon,
   WarningCircleIcon,
 } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 
-import { moveIssue } from "@/features/issues/api/issues";
-import { CreateIssueDialog } from "@/features/issues/ui/create-issue-dialog";
-import { moveSection } from "@/features/sections/api/sections";
-import { CreateSectionDialog } from "@/features/sections/ui/create-section-dialog";
+import { createIssue } from "@/features/issues/api/issues";
+import { IssueDialog } from "@/features/issues/ui/issue-dialog";
+import { ManageMembersDialog } from "@/features/memberships/ui/manage-members-dialog";
+import { createSection } from "@/features/sections/api/sections";
 import { SectionSettingsDialog } from "@/features/sections/ui/section-settings-dialog";
-
 import { boardKeys, getBoard } from "../api/boards";
+import { useBoardMoves } from "../hooks/use-board-moves";
+import { applyBoardMove, type BoardMove } from "../model/board-moves";
 import { useBoardRealtime } from "../realtime/use-board-realtime";
 import { BoardSettingsDialog } from "./board-settings-dialog";
+import { InlineComposer } from "./inline-composer";
+
+type BoardIssue = BoardDetails["sections"][number]["issues"][number];
+type BoardSection = BoardDetails["sections"][number];
 
 function initials(name: string) {
   return name
@@ -50,116 +64,111 @@ function initials(name: string) {
     .toUpperCase();
 }
 
-function AssigneeStack({ assignees }: { assignees: Person[] }) {
-  if (assignees.length === 0) return null;
-
-  const visibleAssignees = assignees.slice(0, 3);
-  const remainingCount = assignees.length - visibleAssignees.length;
-
+const People = memo(function People({ people }: { people: Person[] }) {
   return (
-    <div
-      aria-label={`Assigned to ${assignees.map((assignee) => assignee.name).join(", ")}`}
-      className="flex -space-x-2"
+    <span
+      className="flex -space-x-1.5"
+      aria-label={people.map((person) => person.name).join(", ")}
     >
-      {visibleAssignees.map((assignee) => (
+      {people.slice(0, 4).map((person) => (
         <span
-          className="grid size-7 place-items-center overflow-hidden rounded-full border-2 border-surface-raised bg-secondary font-mono text-[9px] font-bold text-secondary-foreground"
-          key={assignee.id}
-          title={assignee.name}
+          className="grid size-7 shrink-0 place-items-center overflow-hidden rounded-full border-2 border-surface-raised bg-secondary text-[10px] font-semibold text-secondary-foreground"
+          key={person.id}
+          title={person.name}
         >
-          {assignee.image ? (
+          {person.image ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              alt=""
-              className="size-full object-cover"
-              src={assignee.image}
-            />
+            <img alt="" className="size-full object-cover" src={person.image} />
           ) : (
-            initials(assignee.name)
+            initials(person.name)
           )}
         </span>
       ))}
-      {remainingCount > 0 ? (
-        <span className="grid size-7 place-items-center rounded-full border-2 border-surface-raised bg-muted font-mono text-[9px] font-bold text-muted-foreground">
-          +{remainingCount}
+      {people.length > 4 ? (
+        <span className="grid size-7 place-items-center rounded-full border-2 border-surface-raised bg-muted text-[10px]">
+          +{people.length - 4}
         </span>
       ) : null}
-    </div>
+    </span>
   );
-}
+});
 
-function SortableIssueCard({
-  boardId,
+const CardContents = memo(function CardContents({
   issue,
 }: {
-  boardId: string;
-  issue: BoardDetails["sections"][number]["issues"][number];
+  issue: BoardIssue;
+}) {
+  return (
+    <>
+      <span className="block break-words text-sm font-medium leading-5">
+        {issue.title}
+      </span>
+      {issue.description || issue.assignees.length ? (
+        <span className="mt-3 flex items-center justify-between gap-2">
+          {issue.description ? (
+            <TextAlignLeftIcon
+              aria-label="Has description"
+              className="size-4 text-muted-foreground"
+            />
+          ) : (
+            <span />
+          )}
+          <People people={issue.assignees} />
+        </span>
+      ) : null}
+    </>
+  );
+});
+
+const SortableIssueCard = memo(function SortableIssueCard({
+  issue,
+  onOpen,
+}: {
+  issue: BoardIssue;
+  onOpen: (id: string) => void;
 }) {
   const {
     attributes,
     isDragging,
     listeners,
-    setActivatorNodeRef,
     setNodeRef,
     transform,
     transition,
   } = useSortable({
     data: { sectionId: issue.sectionId, type: "issue" },
     id: issue.id,
+    transition: { duration: 140, easing: "ease" },
   });
-
   return (
-    <article
-      className={`group rounded-xl border border-border bg-surface-raised p-4 shadow-hard transition ${
-        isDragging ? "z-20 opacity-60" : ""
-      }`}
+    <button
+      {...attributes}
+      {...listeners}
+      aria-label={`Open ${issue.title}. Hold to drag, or press Space to move.`}
+      className={`board-card w-full touch-manipulation rounded-lg border bg-surface-raised px-3 py-3 text-left shadow-sm hover:border-ring focus-visible:outline-2 focus-visible:outline-ring ${isDragging ? "border-dashed border-ring opacity-25" : "border-border"}`}
+      onClick={() => {
+        if (!isDragging) onOpen(issue.id);
+      }}
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
+      type="button"
     >
-      <div className="flex items-start gap-2">
-        <Link
-          className="min-w-0 flex-1 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href={`/dashboard/boards/${boardId}/issues/${issue.id}`}
-        >
-          <h3 className="text-sm font-semibold leading-5 group-hover:text-muted-foreground">
-            {issue.title}
-          </h3>
-        </Link>
-        <button
-          {...attributes}
-          {...listeners}
-          aria-label={`Move ${issue.title}`}
-          className="grid size-7 shrink-0 touch-none place-items-center rounded-lg text-muted-foreground opacity-70 hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-ring sm:opacity-0 sm:group-hover:opacity-100"
-          ref={setActivatorNodeRef}
-          type="button"
-        >
-          <DotsSixVerticalIcon aria-hidden className="size-4" weight="bold" />
-        </button>
-      </div>
-      <p className="mt-2 line-clamp-3 text-xs leading-5 text-muted-foreground">
-        {issue.description}
-      </p>
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <Link
-          className="font-mono text-[9px] text-muted-foreground hover:text-foreground"
-          href={`/dashboard/boards/${boardId}/issues/${issue.id}`}
-        >
-          Open issue
-        </Link>
-        <AssigneeStack assignees={issue.assignees} />
-      </div>
-    </article>
+      <CardContents issue={issue} />
+    </button>
   );
-}
+});
 
-function SortableBoardColumn({
-  board,
+const SortableBoardColumn = memo(function SortableBoardColumn({
+  boardId,
+  canManage,
   section,
+  onOpen,
 }: {
-  board: BoardDetails;
-  section: BoardDetails["sections"][number];
+  boardId: string;
+  canManage: boolean;
+  section: BoardSection;
+  onOpen: (id: string) => void;
 }) {
-  const canManage = board.role === "admin";
+  const queryClient = useQueryClient();
   const {
     attributes,
     isDragging,
@@ -170,405 +179,470 @@ function SortableBoardColumn({
     transition,
   } = useSortable({
     data: { type: "section" },
-    disabled: !canManage,
+    disabled: { draggable: !canManage },
     id: section.id,
+    transition: { duration: 140, easing: "ease" },
   });
+  const items = useMemo(
+    () => section.issues.map((issue) => issue.id),
+    [section.issues],
+  );
+
+  async function addCard(title: string) {
+    const { issue } = await createIssue({
+      boardId,
+      sectionId: section.id,
+      title,
+      description: "",
+    });
+    queryClient.setQueryData<BoardResponse>(
+      boardKeys.detail(boardId),
+      (current) =>
+        current
+          ? {
+              board: {
+                ...current.board,
+                sections: current.board.sections.map((item) =>
+                  item.id === section.id
+                    ? {
+                        ...item,
+                        issues: item.issues.some((card) => card.id === issue.id)
+                          ? item.issues
+                          : [...item.issues, { ...issue, assignees: [] }],
+                      }
+                    : item,
+                ),
+              },
+            }
+          : current,
+    );
+  }
 
   return (
     <section
-      className={`flex w-[min(86vw,21rem)] shrink-0 flex-col rounded-2xl border border-border bg-surface p-3 sm:w-80 ${
-        isDragging ? "z-10 opacity-70" : ""
-      }`}
+      className={`board-column flex max-h-full w-[min(85vw,18rem)] shrink-0 flex-col rounded-xl border border-border/60 bg-surface p-2 ${isDragging ? "opacity-30" : ""}`}
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
     >
-      <div className="flex items-center justify-between gap-2 px-1 py-1">
-        <div className="flex min-w-0 items-center gap-2">
-          {canManage ? (
-            <button
-              {...attributes}
-              {...listeners}
-              aria-label={`Move ${section.title} section`}
-              className="grid size-7 shrink-0 touch-none place-items-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-              ref={setActivatorNodeRef}
-              type="button"
-            >
-              <DotsSixVerticalIcon
-                aria-hidden
-                className="size-4"
-                weight="bold"
-              />
-            </button>
-          ) : (
-            <span
-              aria-hidden
-              className="size-2.5 shrink-0 rounded-full bg-secondary"
-            />
-          )}
-          <h2 className="truncate text-sm font-semibold">{section.title}</h2>
-        </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="rounded-full bg-muted px-2 py-0.5 font-mono text-[10px] font-semibold text-muted-foreground">
-            {section.issues.length}
-          </span>
-          {canManage ? (
-            <SectionSettingsDialog
-              boardId={board.id}
-              sectionId={section.id}
-              title={section.title}
-            />
-          ) : null}
-        </div>
+      <div className="flex min-h-10 items-center gap-1 px-1 pb-1">
+        {canManage ? (
+          <button
+            {...attributes}
+            {...listeners}
+            aria-label={`Move ${section.title} list`}
+            className="grid size-8 shrink-0 touch-none place-items-center rounded-md text-muted-foreground hover:bg-muted"
+            ref={setActivatorNodeRef}
+            type="button"
+          >
+            <DotsSixVerticalIcon aria-hidden className="size-4" />
+          </button>
+        ) : null}
+        <h2
+          className="min-w-0 flex-1 truncate px-1 text-sm font-semibold"
+          title={section.title}
+        >
+          {section.title}
+        </h2>
+        <span className="px-1 text-xs text-muted-foreground">
+          {section.issues.length}
+        </span>
+        {canManage ? (
+          <SectionSettingsDialog
+            boardId={boardId}
+            sectionId={section.id}
+            title={section.title}
+          />
+        ) : null}
       </div>
-
-      <SortableContext
-        items={section.issues.map((issue) => issue.id)}
-        strategy={verticalListSortingStrategy}
-      >
-        <div className="mt-3 grid min-h-28 content-start gap-2.5">
-          {section.issues.length === 0 ? (
-            <div className="grid min-h-28 place-items-center rounded-xl border border-dashed border-border bg-background/50 px-4 text-center">
-              <p className="text-xs leading-5 text-muted-foreground">
-                No issues in this section.
-              </p>
-            </div>
-          ) : (
-            section.issues.map((issue) => (
-              <SortableIssueCard
-                boardId={board.id}
-                issue={issue}
-                key={issue.id}
-              />
-            ))
-          )}
-        </div>
-      </SortableContext>
-
-      <div className="mt-2">
-        <CreateIssueDialog
-          boardId={board.id}
-          sectionId={section.id}
-          sectionTitle={section.title}
-        />
+      <div className="min-h-16 overflow-y-auto overscroll-y-contain px-0.5 pb-0.5">
+        <SortableContext items={items} strategy={verticalListSortingStrategy}>
+          <div className="grid min-h-12 content-start gap-2">
+            {section.issues.map((issue) => (
+              <SortableIssueCard issue={issue} key={issue.id} onOpen={onOpen} />
+            ))}
+          </div>
+        </SortableContext>
       </div>
+      <InlineComposer
+        label="Add a card"
+        maxLength={200}
+        onCreate={addCard}
+        placeholder="Enter a title for this card…"
+        className="mt-1 shrink-0"
+      />
     </section>
   );
-}
+});
 
-function Presence({ presence }: { presence: Person[] }) {
-  if (presence.length === 0) return null;
-
-  return (
-    <div
-      aria-label={`${presence.map((user) => user.name).join(", ")} currently viewing`}
-      className="flex -space-x-2"
-    >
-      {presence.slice(0, 4).map((user) => (
-        <span
-          className="grid size-9 place-items-center overflow-hidden rounded-full border-2 border-background bg-secondary font-mono text-[10px] font-bold text-secondary-foreground"
-          key={user.id}
-          title={user.name}
-        >
-          {user.image ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img alt="" className="size-full object-cover" src={user.image} />
-          ) : (
-            initials(user.name)
-          )}
-        </span>
-      ))}
-      {presence.length > 4 ? (
-        <span className="grid size-9 place-items-center rounded-full border-2 border-background bg-muted font-mono text-[9px] font-bold text-muted-foreground">
-          +{presence.length - 4}
-        </span>
-      ) : null}
-    </div>
-  );
-}
-
-function BoardWorkspaceSkeleton() {
-  return (
-    <div className="animate-pulse px-4 py-8 md:px-8 lg:px-12 lg:py-10">
-      <div className="h-4 w-28 rounded-full bg-muted" />
-      <div className="mt-6 h-9 w-64 rounded-full bg-muted" />
-      <div className="mt-3 h-4 w-44 rounded-full bg-muted" />
-      <div className="mt-10 flex gap-4 overflow-hidden">
-        {[0, 1, 2].map((column) => (
-          <div
-            className="h-[28rem] w-80 shrink-0 rounded-2xl border border-border bg-surface"
-            key={column}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+const boardCollision: CollisionDetection = (args) => {
+  if (args.active.data.current?.type === "section") {
+    return closestCorners({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        (item) => item.data.current?.type === "section",
+      ),
+    });
+  }
+  const hits = pointerWithin(args);
+  if (hits.length) {
+    const cards = hits.filter(
+      (hit) =>
+        args.droppableContainers.find((item) => item.id === hit.id)?.data
+          .current?.type === "issue",
+    );
+    return cards.length ? cards : hits;
+  }
+  // Use rectangle overlap near list edges and geometry for keyboard movement.
+  return args.pointerCoordinates
+    ? rectIntersection(args)
+    : closestCorners(args);
+};
 
 export function BoardWorkspacePage({ boardId }: { boardId: string }) {
+  return <BoardWorkspace key={boardId} boardId={boardId} />;
+}
+
+function BoardWorkspace({ boardId }: { boardId: string }) {
   const router = useRouter();
   const queryClient = useQueryClient();
+  const moves = useBoardMoves(boardId);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<BoardMove | null>(null);
+  const [openIssueId, setOpenIssueId] = useState<string | null>(null);
   const boardQuery = useQuery({
     queryFn: () => getBoard(boardId),
     queryKey: boardKeys.detail(boardId),
+    enabled: !moves.isSaving && !activeId,
   });
-  const sectionMoveMutation = useMutation({
-    mutationFn: ({
-      position,
-      sectionId,
-    }: {
-      position: number;
-      sectionId: string;
-    }) => moveSection(sectionId, { position }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: boardKeys.detail(boardId),
-      });
-    },
-  });
-  const issueMoveMutation = useMutation({
-    mutationFn: ({
-      issueId,
-      position,
-      sectionId,
-    }: {
-      issueId: string;
-      position: number;
-      sectionId: string;
-    }) => moveIssue(issueId, { position, sectionId }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: boardKeys.detail(boardId),
-      });
-    },
-  });
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+  const baseBoard = boardQuery.data?.board;
+  const optimisticBoard = useMemo(
+    () =>
+      baseBoard ? moves.pending.reduce(applyBoardMove, baseBoard) : undefined,
+    [baseBoard, moves.pending],
   );
-  const board = boardQuery.data?.board;
+  const board = useMemo(
+    () =>
+      optimisticBoard && preview
+        ? applyBoardMove(optimisticBoard, preview)
+        : optimisticBoard,
+    [optimisticBoard, preview],
+  );
   const organisationId = board?.organisationId;
   const handleBoardDeleted = useCallback(() => {
-    if (organisationId) {
-      router.replace(`/dashboard/organizations/${organisationId}`);
-    } else {
-      router.replace("/dashboard");
-    }
+    router.replace(
+      organisationId
+        ? `/dashboard/organizations/${organisationId}`
+        : "/dashboard",
+    );
   }, [organisationId, router]);
   const { connectionState, presence } = useBoardRealtime({
     boardId,
     enabled: Boolean(board),
     onBoardDeleted: handleBoardDeleted,
+    deferBoardRefresh: moves.isSaving || Boolean(activeId),
   });
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 180, tolerance: 6 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
+  const openCard = useCallback((id: string) => setOpenIssueId(id), []);
+  const closeCard = useCallback(() => setOpenIssueId(null), []);
 
-  if (boardQuery.isPending) return <BoardWorkspaceSkeleton />;
-
-  if (boardQuery.isError || !board) {
+  if (boardQuery.isPending)
     return (
-      <div className="grid min-h-[calc(100svh-4rem)] place-items-center px-6 lg:min-h-[calc(100svh-5rem)]">
-        <div className="max-w-sm text-center">
+      <div
+        aria-label="Loading board"
+        className="flex gap-3 overflow-hidden p-4"
+      >
+        {[0, 1, 2].map((id) => (
+          <div
+            className="h-80 w-72 shrink-0 animate-pulse rounded-xl bg-surface"
+            key={id}
+          />
+        ))}
+      </div>
+    );
+  if (!board)
+    return (
+      <div className="grid min-h-80 place-items-center p-6 text-center">
+        <div>
           <WarningCircleIcon
             aria-hidden
-            className="mx-auto size-10 text-destructive"
-            weight="duotone"
+            className="mx-auto size-8 text-destructive"
           />
-          <h1 className="mt-5 text-xl font-semibold">
+          <h1 className="mt-4 text-lg font-semibold">
             Board could not be loaded
           </h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">
-            {boardQuery.error?.message ?? "The board was not found."}
+          <p className="mt-2 text-sm text-muted-foreground">
+            {boardQuery.error?.message}
           </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-2">
-            <Link
-              className="inline-flex h-10 items-center rounded-full border border-border px-4 text-sm font-semibold hover:bg-muted"
-              href="/dashboard"
-            >
-              Organizations
-            </Link>
-            <button
-              className="h-10 rounded-full bg-primary px-4 text-sm font-bold text-primary-foreground"
-              onClick={() => void boardQuery.refetch()}
-              type="button"
-            >
-              Try again
-            </button>
-          </div>
+          <button
+            className="mt-4 rounded-lg border border-border px-4 py-2"
+            onClick={() => void boardQuery.refetch()}
+            type="button"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );
+  const loadedBoard = board;
+  const draggedIssue = board.sections
+    .flatMap((section) => section.issues)
+    .find((issue) => issue.id === activeId);
+  const draggedSection = board.sections.find(
+    (section) => section.id === activeId,
+  );
+
+  function targetFor(event: DragOverEvent | DragEndEvent) {
+    const { over } = event;
+    if (!over) return null;
+    const section = loadedBoard.sections.find(
+      (item) =>
+        item.id === over.id ||
+        item.issues.some((issue) => issue.id === over.id),
+    );
+    return section
+      ? {
+          section,
+          index: section.issues.findIndex((issue) => issue.id === over.id),
+        }
+      : null;
   }
 
-  const loadedBoard = board;
-
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    if (active.data.current?.type === "section") {
-      const targetSectionId =
-        over.data.current?.type === "issue"
-          ? String(over.data.current.sectionId)
-          : String(over.id);
-      const position = loadedBoard.sections.findIndex(
-        (section) => section.id === targetSectionId,
-      );
-      if (loadedBoard.role === "admin" && position >= 0) {
-        sectionMoveMutation.mutate({ position, sectionId: String(active.id) });
-      }
-      return;
-    }
-
-    if (active.data.current?.type !== "issue") return;
-
-    const targetSectionId =
-      over.data.current?.type === "section"
-        ? String(over.id)
-        : over.data.current?.type === "issue"
-          ? String(over.data.current.sectionId)
-          : null;
-    const targetSection = loadedBoard.sections.find(
-      (section) => section.id === targetSectionId,
+  function handleDragOver(event: DragOverEvent) {
+    if (event.active.data.current?.type !== "issue") return;
+    const target = targetFor(event);
+    const source = loadedBoard.sections.find((section) =>
+      section.issues.some((issue) => issue.id === event.active.id),
     );
-    if (!targetSection) return;
-
-    const targetPosition =
-      over.data.current?.type === "issue"
-        ? targetSection.issues.findIndex((issue) => issue.id === over.id)
-        : targetSection.issues.length;
-    if (targetPosition < 0) return;
-
-    issueMoveMutation.mutate({
-      issueId: String(active.id),
-      position: targetPosition,
-      sectionId: targetSection.id,
+    if (!target || !source || source.id === target.section.id) return;
+    const below =
+      event.over &&
+      event.active.rect.current.translated &&
+      event.active.rect.current.translated.top >
+        event.over.rect.top + event.over.rect.height / 2;
+    setPreview({
+      type: "issue",
+      issueId: String(event.active.id),
+      sectionId: target.section.id,
+      position:
+        target.index < 0
+          ? target.section.issues.length
+          : target.index + (below ? 1 : 0),
     });
   }
 
-  const moveError = sectionMoveMutation.error ?? issueMoveMutation.error;
+  function finishDrag(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveId(null);
+    setPreview(null);
+    if (!over) return;
+    const target = targetFor(event);
+    if (!target) return;
+    if (active.data.current?.type === "section") {
+      if (loadedBoard.role === "admin" && active.id !== target.section.id)
+        moves.enqueue({
+          type: "section",
+          sectionId: String(active.id),
+          position: loadedBoard.sections.findIndex(
+            (section) => section.id === target.section.id,
+          ),
+        });
+      return;
+    }
+    if (active.data.current?.type !== "issue") return;
+    const position =
+      target.index < 0
+        ? target.section.issues.filter((issue) => issue.id !== active.id).length
+        : target.index;
+    const original = optimisticBoard?.sections
+      .flatMap((section) => section.issues)
+      .find((issue) => issue.id === active.id);
+    if (
+      original?.sectionId === target.section.id &&
+      original.position === position
+    )
+      return;
+    moves.enqueue({
+      type: "issue",
+      issueId: String(active.id),
+      sectionId: target.section.id,
+      position,
+    });
+  }
+
+  async function addList(title: string) {
+    const { section } = await createSection({ boardId, title });
+    queryClient.setQueryData<BoardResponse>(
+      boardKeys.detail(boardId),
+      (current) =>
+        current
+          ? {
+              board: {
+                ...current.board,
+                sections: current.board.sections.some(
+                  (item) => item.id === section.id,
+                )
+                  ? current.board.sections
+                  : [...current.board.sections, { ...section, issues: [] }],
+              },
+            }
+          : current,
+    );
+  }
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] py-8 lg:min-h-[calc(100svh-5rem)] lg:py-10">
-      <div className="px-4 md:px-8 lg:px-12">
-        <Link
-          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-          href={`/dashboard/organizations/${board.organisationId}`}
+    <div className="board-workspace flex min-h-0 flex-1 flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background px-4 py-3 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            aria-label="Back to boards"
+            className="grid size-9 shrink-0 place-items-center rounded-lg hover:bg-muted"
+            href={`/dashboard/organizations/${board.organisationId}`}
+          >
+            <ArrowLeftIcon aria-hidden className="size-4" />
+          </Link>
+          <h1 className="truncate text-xl font-semibold tracking-tight">
+            {board.title}
+          </h1>
+          <span
+            className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:inline-flex"
+            role="status"
+          >
+            <span
+              aria-hidden
+              className={`size-1.5 rounded-full ${connectionState === "live" ? "bg-emerald-500" : "bg-muted-foreground"}`}
+            />
+            {moves.isSaving
+              ? "Saving…"
+              : connectionState === "live"
+                ? "Live"
+                : connectionState === "connecting"
+                  ? "Connecting…"
+                  : "Reconnecting…"}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <People people={presence} />
+          <ManageMembersDialog
+            canManage={board.role === "admin"}
+            organisationId={board.organisationId}
+            organisationName="this organization"
+          />
+          {board.role === "admin" ? (
+            <BoardSettingsDialog
+              boardId={board.id}
+              onDeleted={handleBoardDeleted}
+              organisationId={board.organisationId}
+              title={board.title}
+            />
+          ) : null}
+        </div>
+      </div>
+      {moves.error ? (
+        <p
+          className="border-b border-destructive/30 bg-destructive/10 px-4 py-2 text-sm text-destructive"
+          role="alert"
         >
-          <ArrowLeftIcon aria-hidden className="size-4" weight="bold" />
-          All boards
-        </Link>
-
-        <div className="mt-6 flex flex-col items-start justify-between gap-5 border-b border-border pb-8 xl:flex-row xl:items-end">
-          <div>
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-xl bg-secondary text-secondary-foreground">
-                <KanbanIcon aria-hidden className="size-5" weight="duotone" />
-              </span>
-              <h1 className="text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
-                {board.title}
-              </h1>
-              <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[10px] font-semibold text-muted-foreground">
-                {board.role === "admin" ? "Admin" : "Member"}
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              <span>
-                {board.sections.length} section
-                {board.sections.length === 1 ? "" : "s"}
-              </span>
-              <span aria-hidden>·</span>
-              <span className="inline-flex items-center gap-1.5">
-                <span
-                  aria-hidden
-                  className={`size-2 rounded-full ${
-                    connectionState === "live"
-                      ? "bg-secondary"
-                      : connectionState === "connecting"
-                        ? "animate-pulse bg-signal"
-                        : "bg-muted-foreground"
-                  }`}
-                />
-                {connectionState === "live"
-                  ? "Live"
-                  : connectionState === "connecting"
-                    ? "Connecting"
-                    : "Reconnecting"}
-              </span>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Presence presence={presence} />
+          Move could not be saved: {moves.error}
+        </p>
+      ) : null}
+      {boardQuery.isError ? (
+        <p className="px-4 py-2 text-sm text-destructive" role="alert">
+          Could not refresh this board. Showing the last loaded version.{" "}
+          <button
+            className="underline"
+            onClick={() => void boardQuery.refetch()}
+            type="button"
+          >
+            Retry
+          </button>
+        </p>
+      ) : null}
+      <DndContext
+        collisionDetection={boardCollision}
+        onDragCancel={() => {
+          setActiveId(null);
+          setPreview(null);
+          void queryClient.invalidateQueries({
+            queryKey: boardKeys.detail(boardId),
+          });
+        }}
+        onDragEnd={finishDrag}
+        onDragOver={handleDragOver}
+        onDragStart={({ active }) => {
+          void queryClient.cancelQueries({
+            queryKey: boardKeys.detail(boardId),
+          });
+          setActiveId(String(active.id));
+        }}
+        sensors={sensors}
+      >
+        <SortableContext
+          items={board.sections.map((section) => section.id)}
+          strategy={horizontalListSortingStrategy}
+        >
+          <div
+            aria-label="Board lists"
+            className="flex min-h-0 flex-1 items-start gap-3 overflow-x-auto overscroll-x-contain p-4 sm:px-6"
+          >
+            {board.sections.map((section) => (
+              <SortableBoardColumn
+                boardId={board.id}
+                canManage={board.role === "admin"}
+                key={section.id}
+                onOpen={openCard}
+                section={section}
+              />
+            ))}
             {board.role === "admin" ? (
-              <>
-                <CreateSectionDialog boardId={board.id} />
-                <BoardSettingsDialog
-                  boardId={board.id}
-                  onDeleted={() =>
-                    router.replace(
-                      `/dashboard/organizations/${board.organisationId}`,
-                    )
-                  }
-                  organisationId={board.organisationId}
-                  title={board.title}
-                />
-              </>
+              <InlineComposer
+                className="w-[min(85vw,18rem)] shrink-0 rounded-xl border border-border/60 bg-surface"
+                label="Add a list"
+                maxLength={100}
+                onCreate={addList}
+                placeholder="Enter list name…"
+              />
+            ) : null}
+            {board.sections.length === 0 ? (
+              <p className="max-w-xs shrink-0 p-3 text-sm text-muted-foreground">
+                {board.role === "admin"
+                  ? "Start with a list like Upcoming, In progress, or Done. Then add your cards."
+                  : "An organization admin can add the first list."}
+              </p>
             ) : null}
           </div>
-        </div>
-
-        {moveError ? (
-          <p
-            className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-            role="alert"
-          >
-            {moveError.message}
-          </p>
-        ) : null}
-      </div>
-
-      {board.sections.length === 0 ? (
-        <div className="px-4 md:px-8 lg:px-12">
-          <div className="mt-8 grid min-h-80 place-items-center rounded-2xl border border-dashed border-border bg-surface px-6 text-center">
-            <div className="max-w-sm">
-              <CheckCircleIcon
-                aria-hidden
-                className="mx-auto size-11 text-secondary"
-                weight="duotone"
-              />
-              <h2 className="mt-5 text-lg font-semibold">No sections yet</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                {board.role === "admin"
-                  ? "Create the first section to start organizing issues."
-                  : "An organization admin needs to create the first section."}
+        </SortableContext>
+        <DragOverlay dropAnimation={null}>
+          {draggedIssue ? (
+            <div className="rotate-2 rounded-lg border border-ring bg-surface-raised px-3 py-3 shadow-panel">
+              <CardContents issue={draggedIssue} />
+            </div>
+          ) : draggedSection ? (
+            <div className="rounded-xl border border-ring bg-surface p-4 shadow-panel">
+              <h2 className="text-sm font-semibold">{draggedSection.title}</h2>
+              <p className="mt-2 text-xs text-muted-foreground">
+                {draggedSection.issues.length} cards
               </p>
             </div>
-          </div>
-        </div>
-      ) : (
-        <DndContext
-          collisionDetection={closestCorners}
-          onDragEnd={handleDragEnd}
-          sensors={sensors}
-        >
-          <SortableContext
-            items={board.sections.map((section) => section.id)}
-            strategy={horizontalListSortingStrategy}
-          >
-            <div
-              aria-label="Board sections"
-              className="mt-8 flex gap-4 overflow-x-auto px-4 pb-8 md:px-8 lg:px-12"
-            >
-              {board.sections.map((section) => (
-                <SortableBoardColumn
-                  board={board}
-                  key={section.id}
-                  section={section}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      )}
+          ) : null}
+        </DragOverlay>
+      </DndContext>
+      {openIssueId ? (
+        <IssueDialog
+          boardId={boardId}
+          boardIsSaving={moves.isSaving}
+          issueId={openIssueId}
+          key={openIssueId}
+          onClose={closeCard}
+        />
+      ) : null}
     </div>
   );
 }

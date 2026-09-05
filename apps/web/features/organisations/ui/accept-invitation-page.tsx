@@ -28,7 +28,7 @@ export function AcceptInvitationPage({
 
   return (
     <div className="grid min-h-[calc(100svh-4rem)] place-items-center px-5 py-12 lg:min-h-[calc(100svh-5rem)]">
-      <section className="w-full max-w-md rounded-3xl border border-border bg-surface-raised p-7 text-center shadow-panel sm:p-9">
+      <section className="w-full max-w-md rounded-xl border border-border bg-surface-raised p-7 text-center shadow-panel sm:p-9">
         {acceptMutation.isSuccess ? (
           <CheckCircleIcon
             aria-hidden
@@ -67,7 +67,7 @@ export function AcceptInvitationPage({
         <div className="mt-7 flex flex-col gap-2 sm:flex-row sm:justify-center">
           {acceptMutation.isSuccess ? (
             <button
-              className="h-11 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground"
+              className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground"
               onClick={() =>
                 router.replace(`/dashboard/organizations/${organisationId}`)
               }
@@ -77,7 +77,7 @@ export function AcceptInvitationPage({
             </button>
           ) : (
             <button
-              className="h-11 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
+              className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
               disabled={acceptMutation.isPending}
               onClick={() => acceptMutation.mutate()}
               type="button"

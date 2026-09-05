@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  ArrowLeftIcon,
-  KanbanIcon,
-  WarningCircleIcon,
-} from "@phosphor-icons/react";
+import { KanbanIcon, WarningCircleIcon } from "@phosphor-icons/react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -24,7 +20,7 @@ function BoardSkeleton() {
   return (
     <div
       aria-hidden
-      className="min-h-44 animate-pulse rounded-2xl border border-border bg-surface-raised p-6"
+      className="min-h-44 animate-pulse rounded-xl border border-border bg-surface-raised p-6"
     >
       <div className="size-11 rounded-xl bg-muted" />
       <div className="mt-6 h-5 w-1/2 rounded-full bg-muted" />
@@ -92,27 +88,17 @@ export function BoardsPage({ organisationId }: { organisationId: string }) {
   const canCreateBoard = organisation.role === "admin";
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] px-4 py-8 md:px-8 md:py-10 lg:min-h-[calc(100svh-5rem)] lg:px-12 lg:py-12">
+    <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-6xl">
-        <Link
-          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-          href="/dashboard"
-        >
-          <ArrowLeftIcon aria-hidden className="size-4" weight="bold" />
-          Organizations
-        </Link>
-
-        <div className="mt-6 flex flex-col items-start justify-between gap-5 border-b border-border pb-8 sm:flex-row sm:items-end">
+        <div className="flex flex-col items-start justify-between gap-4 border-b border-border pb-5 sm:flex-row sm:items-center">
           <div>
             <div className="flex items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
+              <h1 className="text-2xl font-semibold tracking-tight">Boards</h1>
+              <span className="text-xs text-muted-foreground">
                 {organisation.name}
-              </h1>
-              <span className="rounded-full border border-border bg-surface px-2.5 py-1 font-mono text-[10px] font-semibold text-muted-foreground">
-                {organisation.role === "admin" ? "Admin" : "Member"}
               </span>
             </div>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground sm:text-base">
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
               {organisation.description}
             </p>
           </div>
@@ -141,14 +127,14 @@ export function BoardsPage({ organisationId }: { organisationId: string }) {
         {boardsQuery.isPending ? (
           <div
             aria-label="Loading boards"
-            className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           >
             <BoardSkeleton />
             <BoardSkeleton />
             <BoardSkeleton />
           </div>
         ) : boardsQuery.isError ? (
-          <div className="mt-8 grid min-h-72 place-items-center rounded-2xl border border-border bg-surface px-6 text-center">
+          <div className="mt-8 grid min-h-72 place-items-center rounded-xl border border-border bg-surface px-6 text-center">
             <div className="max-w-sm">
               <WarningCircleIcon
                 aria-hidden
@@ -171,7 +157,7 @@ export function BoardsPage({ organisationId }: { organisationId: string }) {
             </div>
           </div>
         ) : boards.length === 0 ? (
-          <div className="mt-8 grid min-h-80 place-items-center rounded-2xl border border-dashed border-border bg-surface px-6 text-center">
+          <div className="mt-8 grid min-h-80 place-items-center rounded-xl border border-dashed border-border bg-surface px-6 text-center">
             <div className="max-w-sm">
               <span className="mx-auto grid size-12 place-items-center rounded-xl bg-secondary text-secondary-foreground">
                 <KanbanIcon aria-hidden className="size-6" weight="duotone" />
@@ -186,7 +172,7 @@ export function BoardsPage({ organisationId }: { organisationId: string }) {
           </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {boards.map((board) => (
                 <BoardCard board={board} key={board.id} />
               ))}
@@ -195,7 +181,7 @@ export function BoardsPage({ organisationId }: { organisationId: string }) {
             {boardsQuery.hasNextPage ? (
               <div className="mt-8 flex justify-center">
                 <button
-                  className="h-10 rounded-full border border-border bg-surface-raised px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
+                  className="h-10 rounded-lg border border-border bg-surface-raised px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
                   disabled={boardsQuery.isFetchingNextPage}
                   onClick={() => void boardsQuery.fetchNextPage()}
                   type="button"

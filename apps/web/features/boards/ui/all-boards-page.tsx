@@ -10,7 +10,7 @@ function BoardSkeleton() {
   return (
     <div
       aria-hidden
-      className="min-h-44 animate-pulse rounded-2xl border border-border bg-surface-raised p-6"
+      className="min-h-44 animate-pulse rounded-xl border border-border bg-surface-raised p-6"
     >
       <div className="size-11 rounded-xl bg-muted" />
       <div className="mt-6 h-5 w-1/2 rounded-full bg-muted" />
@@ -31,15 +31,13 @@ export function AllBoardsPage() {
   const boards = boardsQuery.data?.pages.flatMap((page) => page.boards) ?? [];
 
   return (
-    <div className="min-h-[calc(100svh-7.5rem)] px-4 py-8 md:px-8 lg:min-h-[calc(100svh-5rem)] lg:px-12 lg:py-12">
+    <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
       <div className="mx-auto max-w-6xl">
-        <div className="border-b border-border pb-8">
+        <div className="border-b border-border pb-5">
           <p className="font-mono text-xs font-semibold text-muted-foreground">
             Workspace
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-[-0.045em] sm:text-4xl">
-            Boards
-          </h1>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">Boards</h1>
           <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
             Every board you can access across your organizations.
           </p>
@@ -48,14 +46,14 @@ export function AllBoardsPage() {
         {boardsQuery.isPending ? (
           <div
             aria-label="Loading boards"
-            className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
           >
             <BoardSkeleton />
             <BoardSkeleton />
             <BoardSkeleton />
           </div>
         ) : boardsQuery.isError ? (
-          <div className="mt-8 grid min-h-72 place-items-center rounded-2xl border border-border bg-surface px-6 text-center">
+          <div className="mt-8 grid min-h-72 place-items-center rounded-xl border border-border bg-surface px-6 text-center">
             <div className="max-w-sm">
               <WarningCircleIcon
                 aria-hidden
@@ -69,7 +67,7 @@ export function AllBoardsPage() {
                 {boardsQuery.error.message}
               </p>
               <button
-                className="mt-5 h-10 rounded-full border border-border px-4 text-sm font-semibold hover:bg-muted"
+                className="mt-5 h-10 rounded-lg border border-border px-4 text-sm font-semibold hover:bg-muted"
                 onClick={() => void boardsQuery.refetch()}
                 type="button"
               >
@@ -78,7 +76,7 @@ export function AllBoardsPage() {
             </div>
           </div>
         ) : boards.length === 0 ? (
-          <div className="mt-8 grid min-h-80 place-items-center rounded-2xl border border-dashed border-border bg-surface px-6 text-center">
+          <div className="mt-8 grid min-h-80 place-items-center rounded-xl border border-dashed border-border bg-surface px-6 text-center">
             <div>
               <KanbanIcon
                 aria-hidden
@@ -93,14 +91,14 @@ export function AllBoardsPage() {
           </div>
         ) : (
           <>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {boards.map((board) => (
                 <BoardCard board={board} key={board.id} />
               ))}
             </div>
             {boardsQuery.hasNextPage ? (
               <button
-                className="mx-auto mt-8 block h-10 rounded-full border border-border px-5 text-sm font-semibold disabled:opacity-50"
+                className="mx-auto mt-8 block h-10 rounded-lg border border-border px-5 text-sm font-semibold disabled:opacity-50"
                 disabled={boardsQuery.isFetchingNextPage}
                 onClick={() => void boardsQuery.fetchNextPage()}
                 type="button"

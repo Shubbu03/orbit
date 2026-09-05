@@ -19,7 +19,7 @@ const timestampsSchema = z.object({
 
 export const organisationRecordSchema = timestampsSchema
   .extend({
-    description: z.string().min(1).max(500),
+    description: z.string().max(500),
     id: z.uuid(),
     name: z.string().min(1).max(100),
   })
@@ -33,7 +33,7 @@ export const organisationSchema = organisationRecordSchema
 
 export const createOrganisationInputSchema = z
   .object({
-    description: z.string().trim().min(1).max(500),
+    description: z.string().trim().max(500),
     name: z.string().trim().min(1).max(100),
   })
   .strict();
@@ -156,7 +156,7 @@ export const issueSchema = timestampsSchema
 export const createIssueInputSchema = z
   .object({
     boardId: z.uuid(),
-    description: z.string().trim().min(1).max(5_000),
+    description: z.string().trim().max(5_000),
     sectionId: z.uuid(),
     title: z.string().trim().min(1).max(200),
   })

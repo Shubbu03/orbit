@@ -1,11 +1,18 @@
 "use client";
 
 import { PlusIcon, XIcon } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
+import type { OrganisationRecord } from "@orbit/contracts/entities";
 import { useRef, useState } from "react";
 
 import { CreateOrganisationForm } from "./create-organisation-form";
 
-export function CreateOrganisationDialog() {
+export function CreateOrganisationDialog({
+  compact = false,
+}: {
+  compact?: boolean;
+}) {
+  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [formKey, setFormKey] = useState(0);
 
@@ -18,24 +25,30 @@ export function CreateOrganisationDialog() {
     dialogRef.current?.close();
   }
 
-  function handleCreated() {
+  function handleCreated(organisation: OrganisationRecord) {
     closeDialog();
+    router.push(`/dashboard/organizations/${organisation.id}`);
   }
 
   return (
     <>
       <button
-        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-hard transition hover:-translate-y-0.5 hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        aria-label="Create organization"
+        className={
+          compact
+            ? "grid size-10 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-muted"
+            : "inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground"
+        }
         onClick={openDialog}
         type="button"
       >
         <PlusIcon aria-hidden className="size-4" weight="bold" />
-        New organization
+        {compact ? null : "New organization"}
       </button>
 
       <dialog
         aria-labelledby="create-organization-title"
-        className="m-auto w-[min(92vw,32rem)] rounded-3xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
+        className="m-auto w-[min(92vw,32rem)] rounded-xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
         ref={dialogRef}
       >
         <div className="flex items-start justify-between border-b border-border px-6 py-5 sm:px-7">

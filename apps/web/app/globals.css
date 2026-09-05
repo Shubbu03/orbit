@@ -60,58 +60,40 @@
 
 :root {
   color-scheme: light;
-  --palette-porcelain: #fff5f5;
-  --palette-blush: #f7d6d0;
-  --palette-rose: #e2b4bd;
-  --palette-graphite: #4a4a4a;
-  --background: var(--palette-porcelain);
-  --foreground: var(--palette-graphite);
-  --surface: color-mix(in srgb, var(--palette-porcelain) 84%, white);
-  --surface-raised: color-mix(in srgb, var(--palette-porcelain) 64%, white);
-  --muted: color-mix(in srgb, var(--palette-blush) 56%, white);
-  --muted-foreground: color-mix(
-    in srgb,
-    var(--palette-graphite) 78%,
-    var(--palette-rose)
-  );
-  --border: color-mix(
-    in srgb,
-    var(--palette-rose) 48%,
-    var(--palette-porcelain)
-  );
-  --primary: var(--palette-rose);
-  --primary-foreground: var(--palette-graphite);
-  --secondary: var(--palette-blush);
-  --secondary-foreground: var(--palette-graphite);
-  --signal: var(--palette-rose);
-  --destructive: #b43a47;
-  --ring: color-mix(in srgb, var(--palette-graphite) 62%, var(--palette-rose));
-  --shadow-color: var(--palette-graphite);
-  --panel-shadow: rgb(74 74 74 / 0.13);
-  --grid-line: rgb(226 180 189 / 0.2);
-  --landing-glow-primary: rgb(226 180 189 / 0.24);
+  --background: #f7f8fa;
+  --foreground: #20252b;
+  --surface: #eef0f3;
+  --surface-raised: #ffffff;
+  --muted: #e3e7eb;
+  --muted-foreground: #606b78;
+  --border: #dce1e6;
+  --primary: #315c45;
+  --primary-foreground: #ffffff;
+  --secondary: #dceadf;
+  --secondary-foreground: #294c39;
+  --signal: #967022;
+  --destructive: #b6293a;
+  --ring: #4c7c60;
+  --panel-shadow: rgb(20 30 40 / 0.12);
 }
 
 .dark {
   color-scheme: dark;
-  --background: #2e2b2c;
-  --foreground: var(--palette-porcelain);
-  --surface: #373234;
-  --surface-raised: #403a3c;
-  --muted: #4d4447;
-  --muted-foreground: #dbc6ca;
-  --border: #625458;
-  --primary: var(--palette-rose);
-  --primary-foreground: #352f31;
-  --secondary: var(--palette-blush);
-  --secondary-foreground: var(--palette-graphite);
-  --signal: var(--palette-rose);
-  --destructive: #ff7b85;
-  --ring: var(--palette-blush);
-  --shadow-color: #171415;
-  --panel-shadow: rgb(0 0 0 / 0.42);
-  --grid-line: rgb(247 214 208 / 0.06);
-  --landing-glow-primary: rgb(226 180 189 / 0.1);
+  --background: #17191c;
+  --foreground: #e7e9ed;
+  --surface: #202327;
+  --surface-raised: #292d32;
+  --muted: #353b42;
+  --muted-foreground: #a5aeb9;
+  --border: #393f46;
+  --primary: #afcbb0;
+  --primary-foreground: #1b3423;
+  --secondary: #344b3b;
+  --secondary-foreground: #d7e8d8;
+  --signal: #e1bf72;
+  --destructive: #ff91a0;
+  --ring: #afcbb0;
+  --panel-shadow: rgb(0 0 0 / 0.35);
 }
 
 @layer base {
@@ -122,7 +104,6 @@
   html {
     min-width: 320px;
     background: var(--background);
-    scroll-behavior: smooth;
   }
 
   body {
@@ -150,31 +131,73 @@
   }
 }
 
-@utility orbital-grid {
-  background-image:
-    linear-gradient(var(--grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
-  background-size: 34px 34px;
+@layer base {
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  dialog {
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
 }
 
-@utility landing-backdrop {
-  background-image:
-    radial-gradient(
-      circle at 50% -8%,
-      var(--landing-glow-primary),
-      transparent 36rem
-    ),
-    radial-gradient(circle, var(--grid-line) 1px, transparent 1px);
-  background-size:
-    auto,
-    28px 28px;
-  background-position:
-    center top,
-    center top;
+.board-workspace {
+  overflow: hidden;
 }
 
-@utility text-balance {
-  text-wrap: balance;
+.board-card {
+  cursor: grab;
+  overflow-wrap: anywhere;
+}
+
+.board-card:active {
+  cursor: grabbing;
+}
+
+.board-column {
+  scrollbar-width: thin;
+}
+
+@media (pointer: coarse) {
+  .workspace-shell button,
+  .workspace-shell select {
+    min-height: 2.75rem;
+  }
+
+  .workspace-shell button[aria-label],
+  .workspace-shell a[aria-label] {
+    min-width: 2.75rem;
+  }
+}
+
+@media (max-width: 639px) {
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+
+  .issue-dialog {
+    width: 100%;
+    max-height: 100dvh;
+    height: 100dvh;
+    border-radius: 0;
+    border: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

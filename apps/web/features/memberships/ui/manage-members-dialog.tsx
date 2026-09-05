@@ -149,7 +149,7 @@ export function ManageMembersDialog({
 
       <dialog
         aria-labelledby={headingId}
-        className="m-auto max-h-[88svh] w-[min(94vw,42rem)] overflow-hidden rounded-3xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
+        className="m-auto max-h-[88svh] w-[min(94vw,42rem)] overflow-hidden rounded-xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
         onClose={() => {
           setOpen(false);
           setEmailError(null);
@@ -182,7 +182,7 @@ export function ManageMembersDialog({
 
         <div className="max-h-[calc(88svh-6rem)] overflow-y-auto p-6">
           {canManage ? (
-            <div className="rounded-2xl border border-border bg-background p-4">
+            <div className="rounded-xl border border-border bg-background p-4">
               <form
                 className="flex flex-col gap-2 sm:flex-row"
                 onSubmit={handleInvite}
@@ -343,7 +343,7 @@ export function ManageMembersDialog({
 
           {membershipsQuery.hasNextPage ? (
             <button
-              className="mx-auto mt-5 block h-10 rounded-full border border-border px-4 text-sm font-semibold disabled:opacity-50"
+              className="mx-auto mt-5 block h-10 rounded-lg border border-border px-4 text-sm font-semibold disabled:opacity-50"
               disabled={membershipsQuery.isFetchingNextPage}
               onClick={() => void membershipsQuery.fetchNextPage()}
               type="button"

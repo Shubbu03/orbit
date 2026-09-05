@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { WorkspaceUserMenu } from "@/features/auth/ui/workspace-user-menu";
 import type { SessionUser } from "@/lib/auth-session";
-
 import { WorkspaceNavigation } from "./workspace-navigation";
 
 export function WorkspaceShell({
@@ -14,49 +13,39 @@ export function WorkspaceShell({
   user: SessionUser;
 }) {
   return (
-    <div className="min-h-svh bg-background text-foreground lg:grid lg:grid-cols-[260px_1fr]">
-      <aside className="hidden border-r border-border bg-surface lg:flex lg:flex-col">
+    <div className="workspace-shell flex h-dvh min-h-0 flex-col bg-background text-foreground">
+      <a
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:rounded-lg focus:bg-primary focus:p-3 focus:text-primary-foreground"
+        href="#workspace-content"
+      >
+        Skip to content
+      </a>
+      <header className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-surface-raised px-3 py-2 sm:flex-nowrap sm:px-5">
         <Link
-          className="flex h-20 items-center gap-3 border-b border-border px-6"
+          aria-label="Orbit boards"
+          className="flex shrink-0 items-center gap-2 pr-1 text-lg font-bold tracking-tight"
           href="/dashboard"
         >
-          <span className="grid size-9 place-items-center rounded-full border border-foreground bg-primary font-mono text-xs font-black text-primary-foreground">
+          <span
+            aria-hidden
+            className="grid size-8 place-items-center rounded-lg bg-primary text-sm text-primary-foreground"
+          >
             O
           </span>
-          <span className="text-lg font-extrabold tracking-[-0.04em]">
-            Orbit
-          </span>
+          <span className="hidden sm:inline">Orbit</span>
         </Link>
         <WorkspaceNavigation />
-        <div className="mt-auto border-t border-border p-4">
-          <p className="truncate text-sm font-semibold">{user.name}</p>
-          <p className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-            {user.email}
-          </p>
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          <ThemeToggle />
+          <WorkspaceUserMenu name={user.name} />
         </div>
-      </aside>
-
-      <div className="min-w-0">
-        <header className="flex h-16 items-center justify-between border-b border-border bg-background/90 px-4 backdrop-blur md:px-8 lg:h-20">
-          <Link className="flex items-center gap-2 lg:hidden" href="/dashboard">
-            <span className="grid size-8 place-items-center rounded-full bg-primary font-mono text-[10px] font-black text-primary-foreground">
-              O
-            </span>
-            <span className="font-extrabold">Orbit</span>
-          </Link>
-          <p className="hidden text-sm font-medium text-muted-foreground lg:block">
-            Dashboard
-          </p>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-            <WorkspaceUserMenu name={user.name} />
-          </div>
-        </header>
-        <div className="border-b border-border bg-surface lg:hidden">
-          <WorkspaceNavigation />
-        </div>
-        <main>{children}</main>
-      </div>
+      </header>
+      <main
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
+        id="workspace-content"
+      >
+        {children}
+      </main>
     </div>
   );
 }

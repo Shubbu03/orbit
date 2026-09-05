@@ -88,7 +88,7 @@ export function AuthPanel({ oauthFailed }: { oauthFailed: boolean }) {
   if (session) {
     return (
       <div className="grid gap-4">
-        <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3">
+        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
           <div className="grid size-10 shrink-0 place-items-center rounded-full bg-secondary font-mono text-sm font-bold text-secondary-foreground">
             {session.user.name.trim().charAt(0).toUpperCase() || "O"}
           </div>
@@ -100,7 +100,7 @@ export function AuthPanel({ oauthFailed }: { oauthFailed: boolean }) {
           </div>
         </div>
         <Link
-          className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-hard transition hover:-translate-y-1 hover:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="group inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground transition-colors hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
           href="/dashboard"
         >
           Open dashboard
@@ -129,7 +129,7 @@ export function AuthPanel({ oauthFailed }: { oauthFailed: boolean }) {
   return (
     <div className="grid gap-4">
       <button
-        className="group inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground shadow-hard transition hover:-translate-y-1 hover:shadow-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
+        className="group inline-flex min-h-12 items-center justify-center gap-3 rounded-full bg-primary px-6 text-sm font-bold text-primary-foreground transition-colors hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
         disabled={actionState.status === "pending"}
         onClick={() => void signInWithGoogle()}
         type="button"

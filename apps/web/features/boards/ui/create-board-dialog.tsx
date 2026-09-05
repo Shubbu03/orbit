@@ -6,6 +6,7 @@ import {
 } from "@orbit/contracts/entities";
 import { PlusIcon, XIcon } from "@phosphor-icons/react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { useId, useRef, useState } from "react";
 import { z } from "zod";
 
@@ -24,6 +25,7 @@ export function CreateBoardDialog({
   organisationId: string;
   organisationName: string;
 }) {
+  const router = useRouter();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const queryClient = useQueryClient();
@@ -33,12 +35,13 @@ export function CreateBoardDialog({
 
   const createMutation = useMutation({
     mutationFn: createBoard,
-    onSuccess: () => {
+    onSuccess: ({ board }) => {
       void queryClient.invalidateQueries({ queryKey: boardKeys.allList });
       void queryClient.invalidateQueries({
         queryKey: boardKeys.list(organisationId),
       });
       dialogRef.current?.close();
+      router.push(`/dashboard/boards/${board.id}`);
     },
   });
 
@@ -82,7 +85,7 @@ export function CreateBoardDialog({
   return (
     <>
       <button
-        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-hard transition hover:-translate-y-0.5 hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        className="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition-colors hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         onClick={openDialog}
         type="button"
       >
@@ -92,7 +95,7 @@ export function CreateBoardDialog({
 
       <dialog
         aria-labelledby="create-board-title"
-        className="m-auto w-[min(92vw,30rem)] rounded-3xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
+        className="m-auto w-[min(92vw,30rem)] rounded-xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
         onCancel={(event) => {
           if (createMutation.isPending) {
             event.preventDefault();
@@ -165,7 +168,7 @@ export function CreateBoardDialog({
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <button
-              className="h-11 rounded-full border border-border px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+              className="h-11 rounded-lg border border-border px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
               disabled={createMutation.isPending}
               onClick={closeDialog}
               type="button"
@@ -173,7 +176,7 @@ export function CreateBoardDialog({
               Cancel
             </button>
             <button
-              className="h-11 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
+              className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
               disabled={createMutation.isPending}
               type="submit"
             >

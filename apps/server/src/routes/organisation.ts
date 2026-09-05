@@ -9,7 +9,7 @@ import type { BoardEventPublisher } from "../ws/publisher";
 const createOrganisationBodySchema = z
   .object({
     name: z.string().trim().min(1).max(100),
-    description: z.string().trim().min(1).max(500),
+    description: z.string().trim().max(500),
   })
   .strict();
 

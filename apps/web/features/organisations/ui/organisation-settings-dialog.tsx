@@ -47,7 +47,7 @@ export function OrganisationSettingsDialog({
 
       <dialog
         aria-labelledby={headingId}
-        className="m-auto w-[min(92vw,32rem)] rounded-3xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
+        className="m-auto w-[min(92vw,32rem)] rounded-xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
         onCancel={(event) => deleteMutation.isPending && event.preventDefault()}
         onClose={() => {
           setConfirmingDelete(false);
@@ -82,7 +82,7 @@ export function OrganisationSettingsDialog({
             invitations, and memberships.
           </p>
           {confirmingDelete ? (
-            <div className="mt-5 rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
+            <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-4">
               <p className="text-sm font-semibold">
                 Delete {organisationName}?
               </p>
@@ -93,7 +93,7 @@ export function OrganisationSettingsDialog({
               ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
-                  className="h-10 rounded-full border border-border px-4 text-sm font-semibold"
+                  className="h-10 rounded-lg border border-border px-4 text-sm font-semibold"
                   disabled={deleteMutation.isPending}
                   onClick={() => setConfirmingDelete(false)}
                   type="button"

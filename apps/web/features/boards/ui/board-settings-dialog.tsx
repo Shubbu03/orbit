@@ -92,7 +92,7 @@ export function BoardSettingsDialog({
 
       <dialog
         aria-labelledby={headingId}
-        className="m-auto w-[min(92vw,32rem)] rounded-3xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
+        className="m-auto w-[min(92vw,32rem)] rounded-xl border border-border bg-surface-raised p-0 text-foreground shadow-panel backdrop:bg-foreground/25 backdrop:backdrop-blur-[2px]"
         onCancel={(event) => pending && event.preventDefault()}
         onClose={() => {
           setConfirmingDelete(false);
@@ -162,7 +162,7 @@ export function BoardSettingsDialog({
             This permanently deletes every section, issue, and comment on it.
           </p>
           {confirmingDelete ? (
-            <div className="mt-4 rounded-2xl border border-destructive/30 bg-destructive/10 p-4">
+            <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-4">
               <p className="text-sm font-semibold">Delete this board?</p>
               {deleteMutation.isError ? (
                 <p className="mt-2 text-sm text-destructive" role="alert">
@@ -171,7 +171,7 @@ export function BoardSettingsDialog({
               ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 <button
-                  className="h-10 rounded-full border border-border px-4 text-sm font-semibold"
+                  className="h-10 rounded-lg border border-border px-4 text-sm font-semibold"
                   disabled={pending}
                   onClick={() => setConfirmingDelete(false)}
                   type="button"

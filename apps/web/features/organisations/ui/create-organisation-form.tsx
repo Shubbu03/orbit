@@ -47,7 +47,7 @@ export function CreateOrganisationForm({
 
     const formData = new FormData(event.currentTarget);
     const parsedInput = createOrganisationInputSchema.safeParse({
-      description: formData.get("description"),
+      description: formData.get("description") ?? "",
       name: formData.get("name"),
     });
 
@@ -90,9 +90,12 @@ export function CreateOrganisationForm({
         ) : null}
       </div>
 
-      <div>
-        <label className="text-sm font-semibold" htmlFor={descriptionId}>
-          Description
+      <details>
+        <summary className="cursor-pointer text-sm text-muted-foreground">
+          Add a description (optional)
+        </summary>
+        <label className="sr-only" htmlFor={descriptionId}>
+          Description (optional)
         </label>
         <textarea
           aria-describedby={
@@ -113,7 +116,7 @@ export function CreateOrganisationForm({
             {fieldErrors.description[0]}
           </p>
         ) : null}
-      </div>
+      </details>
 
       {createMutation.isError ? (
         <p
@@ -127,7 +130,7 @@ export function CreateOrganisationForm({
       <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
         {onCancel ? (
           <button
-            className="h-11 rounded-full border border-border px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
+            className="h-11 rounded-lg border border-border px-5 text-sm font-semibold transition hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-50"
             disabled={createMutation.isPending}
             onClick={onCancel}
             type="button"
@@ -136,7 +139,7 @@ export function CreateOrganisationForm({
           </button>
         ) : null}
         <button
-          className="h-11 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
+          className="h-11 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground transition hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:cursor-wait disabled:opacity-60"
           disabled={createMutation.isPending}
           type="submit"
         >

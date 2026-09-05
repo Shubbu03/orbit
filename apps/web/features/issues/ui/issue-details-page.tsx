@@ -4,7 +4,9 @@ import {
   createCommentInputSchema,
   updateCommentInputSchema,
   updateIssueInputSchema,
+  type BoardResponse,
   type Comment,
+  type IssueResponse,
 } from "@orbit/contracts/entities";
 import {
   ArrowLeftIcon,
@@ -16,7 +18,12 @@ import {
   WarningCircleIcon,
   XIcon,
 } from "@phosphor-icons/react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useId, useMemo, useState } from "react";
@@ -38,7 +45,13 @@ import {
 import { useWorkspaceUser } from "@/features/workspace/workspace-user-context";
 import { OrbitApiError } from "@/lib/api/error";
 
-import { deleteIssue, getIssue, issueKeys, updateIssue } from "../api/issues";
+import {
+  deleteIssue,
+  getIssue,
+  issueKeys,
+  moveIssue,
+  updateIssue,
+} from "../api/issues";
 
 const commentTimestampFormatter = new Intl.DateTimeFormat("en-GB", {
   day: "numeric",
@@ -162,14 +175,14 @@ function CommentItem({
             ) : null}
             <div className="mt-2 flex gap-2">
               <button
-                className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-60"
+                className="h-9 rounded-lg bg-primary px-4 text-xs font-bold text-primary-foreground disabled:opacity-60"
                 disabled={updateMutation.isPending}
                 type="submit"
               >
                 {updateMutation.isPending ? "Saving…" : "Save"}
               </button>
               <button
-                className="h-9 rounded-full border border-border px-4 text-xs font-semibold"
+                className="h-9 rounded-lg border border-border px-4 text-xs font-semibold"
                 disabled={updateMutation.isPending}
                 onClick={() => setEditing(false)}
                 type="button"
@@ -242,9 +255,13 @@ function CommentItem({
 export function IssueDetailsPage({
   boardId,
   issueId,
+  onClose,
+  boardIsSaving = false,
 }: {
   boardId: string;
   issueId: string;
+  onClose?: () => void;
+  boardIsSaving?: boolean;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -264,6 +281,7 @@ export function IssueDetailsPage({
   const [hasMoreComments, setHasMoreComments] = useState<boolean | null>(null);
 
   const boardQuery = useQuery({
+    enabled: !onClose,
     queryFn: () => getBoard(boardId),
     queryKey: boardKeys.detail(boardId),
   });
@@ -272,9 +290,13 @@ export function IssueDetailsPage({
     queryKey: issueKeys.detail(issueId),
   });
   const organisationId = boardQuery.data?.board.organisationId;
-  const membersQuery = useQuery({
+  const membersQuery = useInfiniteQuery({
     enabled: Boolean(organisationId),
-    queryFn: () => listMemberships(organisationId ?? "", 0),
+    queryFn: ({ pageParam }) =>
+      listMemberships(organisationId ?? "", pageParam),
+    initialPageParam: 0,
+    getNextPageParam: (page) =>
+      page.page.hasMore ? page.page.offset + page.page.limit : undefined,
     queryKey: organisationId
       ? membershipKeys.list(organisationId)
       : membershipKeys.all,
@@ -283,11 +305,53 @@ export function IssueDetailsPage({
   const updateMutation = useMutation({
     mutationFn: (input: { description: string; title: string }) =>
       updateIssue(issueId, input),
-    onSuccess: () => {
+    onSuccess: ({ issue: saved }) => {
+      queryClient.setQueryData<IssueResponse>(
+        issueKeys.detail(issueId),
+        (current) =>
+          current ? { issue: { ...current.issue, ...saved } } : current,
+      );
+      queryClient.setQueryData<BoardResponse>(
+        boardKeys.detail(boardId),
+        (current) =>
+          current
+            ? {
+                board: {
+                  ...current.board,
+                  sections: current.board.sections.map((section) => ({
+                    ...section,
+                    issues: section.issues.map((card) =>
+                      card.id === saved.id ? { ...card, ...saved } : card,
+                    ),
+                  })),
+                },
+              }
+            : current,
+      );
       setEditing(false);
       void queryClient.invalidateQueries({
         queryKey: issueKeys.detail(issueId),
       });
+      void queryClient.invalidateQueries({
+        queryKey: boardKeys.detail(boardId),
+      });
+    },
+  });
+  const moveMutation = useMutation({
+    mutationFn: (sectionId: string) =>
+      moveIssue(issueId, {
+        sectionId,
+        position:
+          boardQuery.data?.board.sections.find(
+            (section) => section.id === sectionId,
+          )?.issues.length ?? 0,
+      }),
+    onSuccess: ({ issue: moved }) => {
+      queryClient.setQueryData<IssueResponse>(
+        issueKeys.detail(issueId),
+        (current) =>
+          current ? { issue: { ...current.issue, ...moved } } : current,
+      );
       void queryClient.invalidateQueries({
         queryKey: boardKeys.detail(boardId),
       });
@@ -300,12 +364,30 @@ export function IssueDetailsPage({
       void queryClient.invalidateQueries({
         queryKey: boardKeys.detail(boardId),
       });
-      router.replace(`/dashboard/boards/${boardId}`);
+      if (onClose) onClose();
+      else router.replace(`/dashboard/boards/${boardId}`);
     },
   });
   const createCommentMutation = useMutation({
     mutationFn: (content: string) => createComment({ content, issueId }),
-    onSuccess: () => {
+    onSuccess: ({ comment }) => {
+      queryClient.setQueryData<IssueResponse>(
+        issueKeys.detail(issueId),
+        (current) =>
+          current
+            ? {
+                issue: {
+                  ...current.issue,
+                  comments: [
+                    comment,
+                    ...current.issue.comments.filter(
+                      (item) => item.id !== comment.id,
+                    ),
+                  ],
+                },
+              }
+            : current,
+      );
       setCommentError(null);
       void queryClient.invalidateQueries({
         queryKey: issueKeys.detail(issueId),
@@ -355,7 +437,7 @@ export function IssueDetailsPage({
   }, [boardOrganisationId, router]);
   useBoardRealtime({
     boardId,
-    enabled: Boolean(board),
+    enabled: Boolean(board) && !onClose,
     onBoardDeleted: handleBoardDeleted,
   });
   const comments = useMemo(() => {
@@ -421,9 +503,9 @@ export function IssueDetailsPage({
   }
 
   const acceptedMembers =
-    membersQuery.data?.memberships.filter(
-      (membership) => membership.accepted,
-    ) ?? [];
+    membersQuery.data?.pages
+      .flatMap((page) => page.memberships)
+      .filter((membership) => membership.accepted) ?? [];
   const assignedIds = new Set(issue.assignees.map((assignee) => assignee.id));
   const showMoreComments = hasMoreComments ?? issue.commentsPage.hasMore;
 
@@ -479,18 +561,22 @@ export function IssueDetailsPage({
   }
 
   return (
-    <div className="min-h-[calc(100svh-4rem)] px-4 py-8 md:px-8 lg:min-h-[calc(100svh-5rem)] lg:px-12 lg:py-10">
+    <div
+      className={onClose ? "p-4 sm:p-6" : "mx-auto max-w-6xl px-4 py-6 sm:px-6"}
+    >
       <div className="mx-auto max-w-6xl">
-        <Link
-          className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
-          href={`/dashboard/boards/${board.id}`}
-        >
-          <ArrowLeftIcon aria-hidden className="size-4" weight="bold" />
-          {board.title}
-        </Link>
+        {!onClose ? (
+          <Link
+            className="inline-flex items-center gap-2 text-sm font-semibold text-muted-foreground hover:text-foreground"
+            href={`/dashboard/boards/${board.id}`}
+          >
+            <ArrowLeftIcon aria-hidden className="size-4" weight="bold" />
+            {board.title}
+          </Link>
+        ) : null}
 
-        <div className="mt-7 grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="min-w-0 rounded-3xl border border-border bg-surface-raised p-5 shadow-hard sm:p-7">
+        <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_14rem]">
+          <div className="min-w-0">
             {editing ? (
               <form onSubmit={handleIssueUpdate}>
                 <label
@@ -542,14 +628,14 @@ export function IssueDetailsPage({
                 ) : null}
                 <div className="mt-5 flex gap-2">
                   <button
-                    className="h-10 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
+                    className="h-10 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
                     disabled={updateMutation.isPending}
                     type="submit"
                   >
                     {updateMutation.isPending ? "Saving…" : "Save changes"}
                   </button>
                   <button
-                    className="h-10 rounded-full border border-border px-5 text-sm font-semibold"
+                    className="h-10 rounded-lg border border-border px-5 text-sm font-semibold"
                     disabled={updateMutation.isPending}
                     onClick={() => setEditing(false)}
                     type="button"
@@ -565,8 +651,14 @@ export function IssueDetailsPage({
                     <p className="font-mono text-[10px] font-semibold text-muted-foreground">
                       Issue
                     </p>
-                    <h1 className="mt-2 text-3xl font-semibold tracking-[-0.04em]">
-                      {issue.title}
+                    <h1 className="mt-2 break-words text-2xl font-semibold tracking-tight">
+                      <button
+                        className="rounded text-left hover:text-muted-foreground"
+                        onClick={() => setEditing(true)}
+                        type="button"
+                      >
+                        {issue.title}
+                      </button>
                     </h1>
                   </div>
                   <button
@@ -582,9 +674,13 @@ export function IssueDetailsPage({
                     />
                   </button>
                 </div>
-                <p className="mt-7 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
-                  {issue.description}
-                </p>
+                <button
+                  className="mt-5 block min-h-16 w-full rounded-lg bg-surface p-3 text-left text-sm leading-6 whitespace-pre-wrap text-muted-foreground hover:bg-muted"
+                  onClick={() => setEditing(true)}
+                  type="button"
+                >
+                  {issue.description || "Add a description…"}
+                </button>
               </>
             )}
 
@@ -619,7 +715,7 @@ export function IssueDetailsPage({
                   </p>
                 ) : null}
                 <button
-                  className="mt-3 h-10 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
+                  className="mt-3 h-10 rounded-lg bg-primary px-5 text-sm font-bold text-primary-foreground disabled:opacity-60"
                   disabled={createCommentMutation.isPending}
                   type="submit"
                 >
@@ -648,7 +744,7 @@ export function IssueDetailsPage({
               )}
               {showMoreComments ? (
                 <button
-                  className="mt-4 h-10 rounded-full border border-border px-4 text-sm font-semibold disabled:opacity-50"
+                  className="mt-4 h-10 rounded-lg border border-border px-4 text-sm font-semibold disabled:opacity-50"
                   disabled={loadCommentsMutation.isPending}
                   onClick={() => loadCommentsMutation.mutate()}
                   type="button"
@@ -662,16 +758,43 @@ export function IssueDetailsPage({
           </div>
 
           <aside className="space-y-4">
-            <section className="rounded-2xl border border-border bg-surface p-5">
-              <h2 className="text-sm font-semibold">Section</h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                {board.sections.find(
-                  (section) => section.id === issue.sectionId,
-                )?.title ?? "Unknown section"}
-              </p>
+            <section className="rounded-lg bg-surface p-4">
+              <label
+                className="text-sm font-semibold"
+                htmlFor={`${titleId}-section`}
+              >
+                List
+              </label>
+              <select
+                className="mt-2 h-11 w-full rounded-lg border border-border bg-background px-2 text-sm"
+                disabled={moveMutation.isPending || boardIsSaving}
+                id={`${titleId}-section`}
+                onChange={(event) => moveMutation.mutate(event.target.value)}
+                value={
+                  moveMutation.isPending
+                    ? moveMutation.variables
+                    : issue.sectionId
+                }
+              >
+                {board.sections.map((section) => (
+                  <option key={section.id} value={section.id}>
+                    {section.title}
+                  </option>
+                ))}
+              </select>
+              {boardIsSaving ? (
+                <p className="mt-2 text-xs text-muted-foreground" role="status">
+                  Saving board moves…
+                </p>
+              ) : null}
+              {moveMutation.isError ? (
+                <p className="mt-2 text-xs text-destructive" role="alert">
+                  {moveMutation.error.message}
+                </p>
+              ) : null}
             </section>
 
-            <section className="rounded-2xl border border-border bg-surface p-5">
+            <section className="rounded-xl border border-border bg-surface p-5">
               <div className="flex items-center gap-2">
                 <UserPlusIcon aria-hidden className="size-4" weight="duotone" />
                 <h2 className="text-sm font-semibold">Assignees</h2>
@@ -740,6 +863,30 @@ export function IssueDetailsPage({
                   </div>
                 </div>
               ) : null}
+              {membersQuery.hasNextPage ? (
+                <button
+                  className="mt-3 text-xs underline"
+                  disabled={membersQuery.isFetchingNextPage}
+                  onClick={() => void membersQuery.fetchNextPage()}
+                  type="button"
+                >
+                  {membersQuery.isFetchingNextPage
+                    ? "Loading…"
+                    : "Load more members"}
+                </button>
+              ) : null}
+              {membersQuery.isError ? (
+                <p className="mt-3 text-xs text-destructive" role="alert">
+                  Could not load members.{" "}
+                  <button
+                    className="underline"
+                    onClick={() => void membersQuery.refetch()}
+                    type="button"
+                  >
+                    Retry
+                  </button>
+                </p>
+              ) : null}
               {assignMutation.isError || unassignMutation.isError ? (
                 <p className="mt-3 text-xs text-destructive" role="alert">
                   {assignMutation.error?.message ??
@@ -748,7 +895,7 @@ export function IssueDetailsPage({
               ) : null}
             </section>
 
-            <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-5">
+            <section className="rounded-xl border border-destructive/30 bg-destructive/5 p-5">
               <h2 className="text-sm font-semibold">Delete issue</h2>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 This also deletes its comments and assignments.
@@ -756,7 +903,7 @@ export function IssueDetailsPage({
               {confirmingDelete ? (
                 <div className="mt-4 flex flex-wrap gap-2">
                   <button
-                    className="h-9 rounded-full border border-border px-3 text-xs font-semibold"
+                    className="h-9 rounded-lg border border-border px-3 text-xs font-semibold"
                     disabled={deleteMutation.isPending}
                     onClick={() => setConfirmingDelete(false)}
                     type="button"

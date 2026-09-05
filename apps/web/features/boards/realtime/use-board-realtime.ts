@@ -5,7 +5,7 @@ import {
   type PresenceUser,
 } from "@orbit/contracts/websocket";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { issueKeys } from "@/features/issues/api/issues";
 import { apiOrigin } from "@/lib/api/origin";
@@ -27,14 +27,20 @@ export function useBoardRealtime({
   boardId,
   enabled = true,
   onBoardDeleted,
+  deferBoardRefresh = false,
 }: {
   boardId: string;
   enabled?: boolean;
+  deferBoardRefresh?: boolean;
   onBoardDeleted: () => void;
 }) {
   const queryClient = useQueryClient();
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("connecting");
+  const deferred = useRef(deferBoardRefresh);
+  useEffect(() => {
+    deferred.current = deferBoardRefresh;
+  }, [deferBoardRefresh]);
   const [presence, setPresence] = useState<PresenceUser[]>([]);
 
   useEffect(() => {
@@ -60,6 +66,10 @@ export function useBoardRealtime({
       socket.addEventListener("open", () => {
         reconnectAttempt = 0;
         setConnectionState("live");
+        void queryClient.invalidateQueries({
+          queryKey: boardKeys.detail(boardId),
+          refetchType: deferred.current ? "none" : "active",
+        });
       });
 
       socket.addEventListener("message", (message) => {
@@ -111,6 +121,7 @@ export function useBoardRealtime({
 
         void queryClient.invalidateQueries({
           queryKey: boardKeys.detail(boardId),
+          refetchType: deferred.current ? "none" : "active",
         });
 
         if ("issueId" in event) {
